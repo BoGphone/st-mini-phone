@@ -689,47 +689,60 @@
     const [gy, gm] = view.month.split('-').map(Number);
     const md = monthData(view.month);
     const filled = [md.schedule.length && '日程', md.events.length && '随机', (md.season || notesFor(md).items.length) && '小红书'].filter(Boolean);
+    const chips = (attr, cur, list) => `<div class="xsj-seg">${list.map(([v, t]) => `<button data-${attr}="${v}" class="${cur === v ? 'on' : ''}">${t}</button>`).join('')}</div>`;
     return `
-      <div class="xsj-sub">一次生成</div>
-      <div class="xsj-genall">
-        <div><b>${gy}年${gm}月</b><small>${filled.length ? `已有：${filled.join('、')}` : '这个月还什么都没有'}</small></div>
-        <button data-act="gen" data-parts="schedule,holidays,events,season,notes" class="xsj-primary">✨ 生成全部</button>
+      <div class="xsj-card xsj-set">
+        <div class="xsj-set-h">✨ 一次生成</div>
+        <div class="xsj-genall-in">
+          <div><b>${gy}年${gm}月</b><small>${filled.length ? `已有：${filled.join('、')}` : '这个月还什么都没有'}</small></div>
+          <button data-act="gen" data-parts="schedule,holidays,events,season,notes" class="xsj-primary">生成全部</button>
+        </div>
+        <small class="xsj-set-tip">日程、节日、随机、小红书一次请求；上方 ‹ › 换月份。X 在 X 页单独刷新。</small>
       </div>
-      <div class="xsj-hint">日程、节日、随机事件、小红书一次请求生成；用上方 ‹ › 换月份。只想要某一页，就去那一页单独生成。X 浏览记录跟着剧情走，在 X 页单独刷新。</div>
-      <div class="xsj-sub">手机壁纸</div>
-      <div class="xsj-wpset">
-        <div class="xsj-wpthumb"${settings.wallpaper ? ` style="background-image:url('${esc(settings.wallpaper)}')"` : ''}>${settings.wallpaper ? '' : '默认'}</div>
-        <div class="xsj-wpbtns">
-          <label class="xsj-primary xsj-upload">🖼 上传壁纸<input type="file" accept="image/*" id="xsj-wp-file" hidden></label>
-          ${settings.wallpaper ? '<button data-act="wp-clear" class="xsj-regen">恢复默认</button>' : ''}
+
+      <div class="xsj-card xsj-set">
+        <div class="xsj-set-h">🖼 外观</div>
+        <div class="xsj-set-row"><span>玻璃颜色</span>${chips('glass', settings.glass || 'auto', [['auto', '自动'], ['light', '浅色'], ['dark', '深色']])}</div>
+        ${(settings.glass || 'auto') === 'auto' && settings.wallpaper ? `<small class="xsj-set-tip">按壁纸明暗自动选择，现在是${settings.wpTone === 'dark' ? '深色' : '浅色'}</small>` : ''}
+        <div class="xsj-wpset-in">
+          <div class="xsj-wpthumb"${settings.wallpaper ? ` style="background-image:url('${esc(settings.wallpaper)}')"` : ''}>${settings.wallpaper ? '' : '默认'}</div>
+          <div class="xsj-wpbtns">
+            <label class="xsj-primary xsj-upload">上传壁纸<input type="file" accept="image/*" id="xsj-wp-file" hidden></label>
+            ${settings.wallpaper ? '<button data-act="wp-clear" class="xsj-regen">恢复默认</button>' : ''}
+          </div>
+        </div>
+        <input id="xsj-wp-desc" placeholder="用 NovelAI 画：想要的画面（可选）">
+        <div class="xsj-set-row">
+          <label class="xsj-check"><input type="checkbox" id="xsj-wp-char"> 画进 ${esc(charKey())}</label>
+          <button data-act="wp-draw" class="xsj-primary xsj-nowrap">🎨 画一张</button>
         </div>
       </div>
-      <div class="xsj-wpdraw">
-        <input id="xsj-wp-desc" placeholder="用 NovelAI 画：想要什么画面（可选，中文也行）">
-        <div class="xsj-row2">
-          <label class="xsj-check"><input type="checkbox" id="xsj-wp-char"> 把 ${esc(charKey())} 画进去</label>
-          <button data-act="wp-draw" class="xsj-primary" style="margin-top:0">🎨 画一张</button>
-        </div>
+
+      <div class="xsj-card xsj-set">
+        <div class="xsj-set-h">📱 这部手机</div>
+        <div class="xsj-set-row"><span>谁的手机</span>${chips('owner', settings.owner, [['char', '角色'], ['user', '我']])}</div>
+        <div class="xsj-set-row"><span>剧情日期</span><small>${sd.from === 'chat' ? `${sd.y}-${pad(sd.m)}-${pad(sd.d)}（聊天里认出的）` : '没认出，用现实日期'}</small></div>
+        <input data-set="dateOverride" placeholder="手动指定，如 1996-11-09，留空自动" value="${esc(chat.dateOverride)}">
       </div>
-      <div class="xsj-hint">上传的图压缩后存进 user/images/小手机；NovelAI 画的存进柏宝绘图库。壁纸所有角色卡共用。</div>
-      <div class="xsj-sub">谁的手机</div>
-      <div class="xsj-chips">${[['char', '角色'], ['user', '我']].map(([v, t]) => `<button data-owner="${v}" class="${settings.owner === v ? 'on' : ''}" style="--c:#f07aa0">${t}</button>`).join('')}</div>
-      <div class="xsj-sub">剧情日期</div>
-      <div class="xsj-hint">自动识别：${sd.from === 'chat' ? `${sd.y}-${pad(sd.m)}-${pad(sd.d)}（来自最近的聊天）` : '聊天里没找到日期，暂用现实日期'}</div>
-      <input data-set="dateOverride" placeholder="手动指定，如 1996-11-09，留空则自动" value="${esc(chat.dateOverride)}">
-      <div class="xsj-sub">生日和纪念日（每年固定显示）</div>
-      ${chat.birthdays.length
-        ? chat.birthdays.slice().sort((a, b) => a.md.localeCompare(b.md)).map((b) => `<div class="xsj-fixed"><span>${b.kind === '纪念日' ? '💝' : '🎂'} ${esc(b.who)}</span><em>${+b.md.split('-')[0]}月${+b.md.split('-')[1]}日${b.manual ? ' · 自记' : ''}</em></div>`).join('')
-        : `<div class="xsj-hint">${chat.birthdaysDone ? '设定里没找到写明日期的生日，可以在日历里点「＋」选「生日」自己加' : '第一次生成日历时会从设定里找一次，之后就固定了'}</div>`}
-      <button data-act="regen-bd" class="xsj-regen">↻ 重新从设定里找（保留自记）</button>
-      <div class="xsj-sub">生成用的 API</div>
-      <label class="xsj-check"><input type="checkbox" data-set="useTavern" ${a.useTavern ? 'checked' : ''}> 用酒馆当前连接的 API</label>
-      <div class="${a.useTavern ? 'xsj-off' : ''}">
-        <input data-set="url" placeholder="地址，如 https://xxx/v1" value="${esc(a.url)}">
-        <input data-set="key" type="password" placeholder="Key" value="${esc(a.key)}">
-        <div class="xsj-row2"><input data-set="model" list="xsj-models" placeholder="模型名" value="${esc(a.model)}"><button data-act="models">获取模型</button></div>
-        <datalist id="xsj-models"></datalist>
-        <div class="xsj-hint">Key 只存在这台电脑的酒馆设置里，不会写进聊天。</div>
+
+      <div class="xsj-card xsj-set">
+        <div class="xsj-set-h">🎂 生日和纪念日 <small>每年固定显示</small></div>
+        ${chat.birthdays.length
+          ? chat.birthdays.slice().sort((a, b) => a.md.localeCompare(b.md)).map((b) => `<div class="xsj-fixed"><span>${b.kind === '纪念日' ? '💝' : '🎂'} ${esc(b.who)}</span><em>${+b.md.split('-')[0]}月${+b.md.split('-')[1]}日${b.manual ? ' · 自记' : ''}</em></div>`).join('')
+          : `<small class="xsj-set-tip">${chat.birthdaysDone ? '设定里没找到写明日期的，可以在日历点「＋」选「生日」自己加' : '第一次生成日历时会找一次，之后固定'}</small>`}
+        <button data-act="regen-bd" class="xsj-regen">↻ 重新从设定里找（保留自记）</button>
+      </div>
+
+      <div class="xsj-card xsj-set">
+        <div class="xsj-set-h">🔌 生成用的 API</div>
+        <label class="xsj-check"><input type="checkbox" data-set="useTavern" ${a.useTavern ? 'checked' : ''}> 用酒馆当前连接的 API</label>
+        <div class="${a.useTavern ? 'xsj-off' : ''}">
+          <input data-set="url" placeholder="地址，如 https://xxx/v1" value="${esc(a.url)}">
+          <input data-set="key" type="password" placeholder="Key" value="${esc(a.key)}">
+          <div class="xsj-row2"><input data-set="model" list="xsj-models" placeholder="模型名" value="${esc(a.model)}"><button data-act="models" class="xsj-nowrap">获取模型</button></div>
+          <datalist id="xsj-models"></datalist>
+          <small class="xsj-set-tip">Key 只存在这台电脑的酒馆设置里，不会写进聊天。</small>
+        </div>
       </div>
       <button data-act="save-set" class="xsj-primary xsj-block">保存设置</button>
       ${lastRaw ? `<details class="xsj-raw"><summary>上次没解析成功的 AI 返回（排查用）</summary><pre>${esc(lastRaw)}</pre></details>` : ''}`;
@@ -744,6 +757,8 @@
     const busy = view.busy ? `<div class="xsj-busy"><div class="xsj-spin"></div><div>${esc(view.busy)}</div><button data-act="cancel-gen">取消</button></div>` : '';
     const scr = root.querySelector('.xsj-screen');
     scr.classList.toggle('has-wp', !!settings.wallpaper);
+    scr.classList.toggle('tone-dark', glassTone() === 'dark');
+    if (settings.wallpaper && !settings.wpTone) measureTone();
     if (settings.wallpaper) scr.style.setProperty('--xsj-wp', `url("${settings.wallpaper.replace(/"/g, '%22')}")`);
     else scr.style.removeProperty('--xsj-wp');
     const isMap = view.tab === 'map';
@@ -1015,6 +1030,7 @@
       return;
     }
     if (t.dataset.type && view.editing) { syncForm(); view.editing.type = t.dataset.type; return render(); }
+    if (t.dataset.glass) { settings.glass = t.dataset.glass; saveSettings(settings); return render(); }
     if (t.dataset.owner) { settings.owner = t.dataset.owner; saveSettings(settings); return render(); }
     switch (act) {
       case 'prev': return shiftMonth(-1);
@@ -1100,7 +1116,7 @@
         const prompt = tag ? `${tag}, solo, ${base}` : `no humans, scenery, ${base}`;
         const nl = desc || `${currentMap()?.name || '这个世界'}的风景，适合做手机壁纸`;
         const pic = await drawImage({ prompt, nl, size: 'portrait' }, '正在画壁纸');
-        if (pic) { settings.wallpaper = pic; saveSettings(settings); toast('壁纸换好了', 'success'); render(); }
+        if (pic) { settings.wallpaper = pic; settings.wpTone = ''; saveSettings(settings); toast('壁纸换好了', 'success'); render(); }
         return;
       }
       case 'note-pic': {
@@ -1145,7 +1161,7 @@
         batchStop = false;
         return;
       }
-      case 'wp-clear': settings.wallpaper = ''; saveSettings(settings); return render();
+      case 'wp-clear': settings.wallpaper = ''; settings.wpTone = ''; saveSettings(settings); return render();
       case 'buy': case 'cart-del': {
         const md = monthData(view.month);
         if (act === 'buy') { const c = md.cart.find((x) => x.id === t.dataset.id); if (c) c.bought = !c.bought; }
@@ -1203,6 +1219,33 @@
     if (ev.target.id === 'xsj-wp-file' && ev.target.files?.[0]) uploadWallpaper(ev.target.files[0]);
   }
 
+  // 玻璃颜色：设置里选「自动」时看壁纸明暗，暗壁纸用深色玻璃
+  function glassTone() {
+    const pick = settings.glass || 'auto';
+    if (pick !== 'auto') return pick;
+    return settings.wallpaper && settings.wpTone === 'dark' ? 'dark' : 'light';
+  }
+  let measuring = false;
+  function measureTone() {
+    if (measuring || !settings.wallpaper) return;
+    measuring = true;
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const cv = D.createElement('canvas'); cv.width = 24; cv.height = 40;
+        const g = cv.getContext('2d'); g.drawImage(img, 0, 0, 24, 40);
+        const px = g.getImageData(0, 0, 24, 40).data;
+        let sum = 0;
+        for (let i = 0; i < px.length; i += 4) sum += 0.2126 * px[i] + 0.7152 * px[i + 1] + 0.0722 * px[i + 2];
+        settings.wpTone = sum / (px.length / 4) < 128 ? 'dark' : 'light';
+        saveSettings(settings);
+      } catch (e) { settings.wpTone = 'light'; }
+      measuring = false; render();
+    };
+    img.onerror = () => { measuring = false; };
+    img.src = settings.wallpaper;
+  }
+
   // 壁纸：压到最长边 1600px 的 JPEG，存进酒馆的 user/images/小手机；上传失败就直接存在设置里
   async function uploadWallpaper(file) {
     try {
@@ -1224,6 +1267,7 @@
         if (res.ok) { const j = await res.json(); if (j.path) url = '/' + String(j.path).replace(/\\/g, '/').replace(/^\/+/, '').split('/').map(encodeURIComponent).join('/'); }
       } catch (e) { console.warn('[小手机] 壁纸上传失败，改存在设置里', e); }
       settings.wallpaper = url || dataUrl;
+      settings.wpTone = '';
       saveSettings(settings);
       toast('壁纸换好了', 'success');
     } catch (e) {
@@ -1529,10 +1573,71 @@
 .xsj-xmask{position:absolute;top:34px;right:0;bottom:0;left:0;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;color:#fff!important;text-shadow:0 1px 6px rgba(0,0,0,.6)}
 .xsj-xitem.is-saved .xsj-xpost{box-shadow:0 0 0 1.5px #e86a95,0 4px 18px rgba(0,0,0,.18)}
 .xsj-xnote{font-size:12px;color:#b2456f!important;padding:4px 6px 0;font-style:italic;text-shadow:0 1px 6px rgba(255,255,255,.95)}
+/* ---------- 玻璃质感细化：渐变 + 顶边高光 + 柔和阴影，顶部和底栏用渐隐代替硬条 ---------- */
+#${ROOT_ID} :is(.xsj-cal,.xsj-daycard,.xsj-card,.xsj-note,.xsj-form,.xsj-place,.xsj-loc,.xsj-genall,.xsj-cart,.xsj-weather,.xsj-ask-card,.xsj-wpset,.xsj-mapwrap,.xsj-empty){
+  background:linear-gradient(150deg,rgba(255,255,255,.6),rgba(255,255,255,.3))!important;
+  border:1px solid rgba(255,255,255,.5)!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.75),0 10px 30px rgba(60,30,60,.12)!important}
+#${ROOT_ID} .xsj-screen{position:relative}
+#${ROOT_ID} .xsj-screen>:is(.xsj-status,.xsj-head,.xsj-body,.xsj-tabs){position:relative;z-index:1}
+#${ROOT_ID} .xsj-screen.has-wp::before{content:'';position:absolute;left:0;right:0;top:0;height:120px;z-index:0;pointer-events:none;background:linear-gradient(rgba(255,255,255,.55),rgba(255,255,255,0))}
+#${ROOT_ID} .xsj-tabs{background:linear-gradient(rgba(255,255,255,.2),rgba(255,255,255,.6))!important;border-top:0!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.35)}
+#${ROOT_ID} .xsj-cal{border-radius:24px}#${ROOT_ID} .xsj-daycard{border-radius:22px}
+
+/* 设置页：分组卡片 */
+#${ROOT_ID} .xsj-set{padding:12px 14px;border-radius:20px;margin-bottom:10px}
+#${ROOT_ID} .xsj-set-h{font-size:13px;font-weight:700;margin-bottom:8px}.xsj-set-h small{font-weight:400;opacity:.55;font-size:11px;margin-left:4px}
+#${ROOT_ID} .xsj-set-row{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:6px 0;font-size:13px}
+#${ROOT_ID} .xsj-set-row small{display:inline;opacity:.65;font-size:11.5px;text-align:right}
+#${ROOT_ID} .xsj-set-tip{display:block;font-size:11px;opacity:.6;line-height:1.5;margin-top:4px}
+#${ROOT_ID} .xsj-genall-in,#${ROOT_ID} .xsj-wpset-in{display:flex;align-items:center;justify-content:space-between;gap:10px}
+#${ROOT_ID} .xsj-genall-in b{display:block;font-size:15px}#${ROOT_ID} .xsj-genall-in small{font-size:11px;opacity:.6}
+#${ROOT_ID} .xsj-genall-in .xsj-primary{margin-top:0;flex:none}
+#${ROOT_ID} .xsj-wpset-in{justify-content:flex-start;margin:8px 0 4px}
+#${ROOT_ID} .xsj-nowrap{white-space:nowrap;flex:none;margin-top:0}
+#${ROOT_ID} .xsj-seg{display:flex;padding:2px;border-radius:12px;background:rgba(120,90,110,.12);flex:none}
+#${ROOT_ID} .xsj-seg button{padding:4px 11px!important;border-radius:10px;font-size:12px;opacity:.65}
+#${ROOT_ID} .xsj-seg button.on{background:#e86a95!important;color:#fff!important;opacity:1;box-shadow:0 2px 6px rgba(232,106,149,.35)}
+#${ROOT_ID} .tone-dark .xsj-seg{background:rgba(255,255,255,.1)}
+#${ROOT_ID} .xsj-set .xsj-regen{margin-top:8px}
+/* ---------- 深色玻璃（暗壁纸自动切换，或在设置里手选） ---------- */
+#${ROOT_ID} .tone-dark{color:#f1ecf5}
+#${ROOT_ID} .tone-dark:not(.has-wp){background:radial-gradient(120% 70% at 0% 0%,#3b2440 0%,transparent 55%),radial-gradient(90% 60% at 100% 25%,#24264a 0%,transparent 60%),linear-gradient(160deg,#17151d,#1e1b29)!important}
+#${ROOT_ID} .tone-dark :is(.xsj-cal,.xsj-daycard,.xsj-card,.xsj-note,.xsj-form,.xsj-place,.xsj-loc,.xsj-genall,.xsj-cart,.xsj-weather,.xsj-ask-card,.xsj-wpset,.xsj-mapwrap,.xsj-empty){
+  background:linear-gradient(150deg,rgba(46,40,60,.55),rgba(18,16,26,.32))!important;
+  border:1px solid rgba(255,255,255,.12)!important;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.1),0 12px 32px rgba(0,0,0,.35)!important}
+#${ROOT_ID} .tone-dark.has-wp::before{background:linear-gradient(rgba(10,8,16,.55),rgba(10,8,16,0))}
+#${ROOT_ID} .tone-dark .xsj-tabs{background:linear-gradient(rgba(14,12,20,.15),rgba(14,12,20,.6))!important;box-shadow:inset 0 1px 0 rgba(255,255,255,.08)}
+#${ROOT_ID} .tone-dark .xsj-tabs button.on{color:#ff9cc0!important}
+#${ROOT_ID} .tone-dark :is(.xsj-status,.xsj-head,.xsj-sub,.xsj-hint,.xsj-none,.xsj-regen,.xsj-plat,.xsj-xmeta,.xsj-xnote){text-shadow:0 1px 8px rgba(0,0,0,.55)}
+#${ROOT_ID} .tone-dark :is(.xsj-head button,.xsj-maptools button){background:rgba(255,255,255,.1)!important;border-color:rgba(255,255,255,.14)!important}
+#${ROOT_ID} .tone-dark input{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.16);color:#f1ecf5}
+#${ROOT_ID} .tone-dark input::placeholder{color:rgba(241,236,245,.45)}
+#${ROOT_ID} .tone-dark :is(.xsj-week span.is-wkd,.xsj-day.is-wkd span){color:#ff9cc0}
+#${ROOT_ID} .tone-dark .xsj-day.has-hol span,#${ROOT_ID} .tone-dark .xsj-hol{color:#ffc46b}
+#${ROOT_ID} .tone-dark .xsj-day.has-bd span,#${ROOT_ID} .tone-dark .xsj-hol.xsj-bd{color:#ff8fbb}
+#${ROOT_ID} .tone-dark .xsj-hol.xsj-vac{color:#7fd6a4}
+#${ROOT_ID} .tone-dark .xsj-day.is-off{background:rgba(127,214,164,.14)!important}
+#${ROOT_ID} .tone-dark :is(.xsj-day.is-sel,.xsj-day.is-off.is-sel){background:rgba(255,255,255,.14)!important;box-shadow:0 3px 14px rgba(0,0,0,.3)}
+#${ROOT_ID} .tone-dark .xsj-day.is-today span{color:#fff!important}
+#${ROOT_ID} .tone-dark .xsj-holpill{background:rgba(255,196,107,.16)!important;color:#ffc46b!important}
+#${ROOT_ID} .tone-dark .xsj-bdpill{background:rgba(255,143,187,.16)!important;color:#ff8fbb!important}
+#${ROOT_ID} .tone-dark .xsj-vacpill{background:rgba(127,214,164,.16)!important;color:#7fd6a4!important}
+#${ROOT_ID} .tone-dark .xsj-bdnote{background:rgba(255,143,187,.12)!important;color:#ffb3cf}
+#${ROOT_ID} .tone-dark .xsj-daycard .xsj-item{border-bottom-color:rgba(255,255,255,.08)!important}
+#${ROOT_ID} .tone-dark :is(.xsj-plat,.xsj-cart em){color:#ff8fa8}
+#${ROOT_ID} .tone-dark .xsj-note-tags,#${ROOT_ID} .tone-dark .xsj-linknote{color:#8fb8ff!important}
+#${ROOT_ID} .tone-dark .xsj-cmt>i{background:rgba(255,143,187,.2);color:#ffb3cf}
+#${ROOT_ID} .tone-dark :is(.xsj-trend,.xsj-fixed,.xsj-note-stat,.xsj-place-li){border-color:rgba(255,255,255,.1)!important}
+#${ROOT_ID} .tone-dark .xsj-xnote{color:#ffb3cf!important}
+#${ROOT_ID} .tone-dark .xsj-xdraw{background:rgba(255,255,255,.1)!important;border-color:rgba(255,255,255,.16)!important;color:#f1ecf5!important}
+#${ROOT_ID} .tone-dark :is(.xsj-busy,.xsj-ask){background:rgba(10,8,16,.35)!important}
+#${ROOT_ID} .tone-dark .xsj-spin{border-color:rgba(255,255,255,.2);border-top-color:#ff8fb4}
+#${ROOT_ID} .tone-dark .xsj-mini{background:rgba(255,143,187,.18)!important;color:#ffb3cf!important}
+#${ROOT_ID} .tone-dark .xsj-wpthumb{color:#cfc6d6}
 /* 酒馆开了「禁用模糊」时会用 body.no-blur * 把所有模糊去掉；小手机里的毛玻璃单独保留 */
 #${ROOT_ID} :is(.xsj-cal,.xsj-daycard,.xsj-card,.xsj-note,.xsj-form,.xsj-place,.xsj-loc,.xsj-genall,.xsj-cart,.xsj-weather,.xsj-ask-card,.xsj-wpset,.xsj-mapwrap,.xsj-empty,.xsj-tabs,.xsj-busy,.xsj-ask){-webkit-backdrop-filter:blur(18px) saturate(170%)!important;backdrop-filter:blur(18px) saturate(170%)!important}
-#${ROOT_ID} .has-wp :is(.xsj-status,.xsj-head){background:rgba(255,255,255,.4);-webkit-backdrop-filter:blur(16px) saturate(160%)!important;backdrop-filter:blur(16px) saturate(160%)!important}
-#${ROOT_ID} .has-wp .xsj-head{padding-bottom:8px;border-bottom:1px solid rgba(255,255,255,.5);margin-bottom:6px}
 #${ROOT_ID} :is(.xsj-head button,.xsj-maptools button){-webkit-backdrop-filter:blur(14px)!important;backdrop-filter:blur(14px)!important}
 `;
     D.head.appendChild(st);
