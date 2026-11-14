@@ -1,0 +1,10 @@
+{
+  "display_name": "小手机",
+  "loading_order": 200,
+  "requires": [],
+  "optional": [],
+  "js": "index.js",
+  "css": "",
+  "author": "啵叽",
+  "version": "1.0.0"
+}
