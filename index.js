@@ -373,14 +373,24 @@
     render();
   }
   let batchStop = false; // 一键生图时按了取消：停掉后面的
+  // 去掉会让 NovelAI 画出播放器边框、截图界面、帖子外框的词，只留画面本身
+  const FRAME_WORDS = /^(?:video|video screenshot|screenshot|screencap|screen ?cap|ui|user interface|interface|border|bordered|frame|framed|picture frame|letterbox(?:ed)?|black bars?|play button|progress bar|timestamp|watermark|text|caption|subtitles?|social media(?: post)?|post|tweet|phone screen|app|website|web page|split screen|multiple views|collage)$/i;
+  function cleanTags(s) { return String(s || '').split(',').map((t) => t.trim()).filter((t) => t && !FRAME_WORDS.test(t)).join(', '); }
+  const stripMediaMark = (s) => String(s || '').replace(/^\s*\[(?:视频|图片|动图|直播)[^\]]*\]\s*/, '');
   async function drawXPic(it, label) {
     const video = /视频|video/i.test(it.media);
-    const pic = await drawImage({ prompt: it.img || 'photo, social media post', nl: it.img ? '' : `${it.media} ${it.text}`, size: video ? 'landscape' : 'portrait' }, label);
+    const tags = cleanTags(it.img);
+    const pic = await drawImage({
+      prompt: tags || 'full frame, cinematic still, detailed',
+      nl: tags ? '' : `${stripMediaMark(it.media)} ${it.text}`.trim(),
+      size: video ? 'landscape' : 'portrait',
+    }, label);
     if (pic) { it.pic = pic; saveChat(); render(); }
     return !!pic;
   }
   async function drawNotePic(n, label) {
-    const pic = await drawImage({ prompt: n.img || 'no humans, aesthetic photo, soft lighting, detailed', nl: n.img ? '' : `${n.title}。${n.text}`, size: 'portrait' }, label);
+    const tags = cleanTags(n.img);
+    const pic = await drawImage({ prompt: tags || 'no humans, aesthetic photo, soft lighting, detailed, full frame', nl: tags ? '' : `${n.title}。${n.text}`, size: 'portrait' }, label);
     if (pic) { n.pic = pic; saveChat(); render(); }
     return !!pic;
   }
@@ -627,7 +637,7 @@
       `- 发帖账号是虚构的路人账号或博主，不写现实中的真人；所有涉及的人都是成年人。`,
       `- 时间写成相对时间，集中在深夜和独处的时候，如“昨晚 01:42”“今天 07:15”，从新到旧排列。`,
       `- note 是{{char}}看到时的反应或心里话，10字左右，符合性格（可以是嘴硬、羞耻、认真收藏、立刻划走）。`,
-      `JSON 结构：{"xlog": {"searches": ["最近的搜索词，4-6个"], "items": [{"time": "相对时间", "kind": "浏览|点赞|收藏|看视频", "author": "发帖账号昵称", "handle": "@账号", "text": "帖子内容，不超过60字", "media": "附带图片或视频的简短描述，如 [视频 0:43] …，没有就空字符串", "img": "有图片或视频时，用英文 danbooru tag 写出画面给 NovelAI 出图（人物都是成年人，写 adult 相关 tag），没有就空字符串", "note": "{{char}}的反应", "nsfw": true或false}]}}  // items 10-14条`,
+      `JSON 结构：{"xlog": {"searches": ["最近的搜索词，4-6个"], "items": [{"time": "相对时间", "kind": "浏览|点赞|收藏|看视频", "author": "发帖账号昵称", "handle": "@账号", "text": "帖子内容，不超过60字", "media": "附带图片或视频的简短描述，如 [视频 0:43] …，没有就空字符串", "img": "有图片或视频时，用英文 danbooru tag 写出画面本身给 NovelAI 出图：只写画面里的人物、动作、场景、光线、构图；视频就写其中一帧的画面。不要写 video、screenshot、ui、border、frame、play button、text 这类会画出播放器或截图边框的词。人物都是成年人，写 adult 相关 tag。没有图就空字符串", "note": "{{char}}的反应", "nsfw": true或false}]}}  // items 10-14条`,
     ].join('\n');
     const data = await callAI(instr, '正在偷看浏览记录…', false, false);
     if (!data) return;
