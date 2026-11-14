@@ -132,6 +132,8 @@
   // 旧数据里 type 为“节日”的日程挪到 holidays
   const monthData = (key) => {
     const md = (chat.months[key] ||= { schedule: [], events: [], season: null, trends: [] });
+    if (!Array.isArray(md.schedule)) md.schedule = [];
+    if (!Array.isArray(md.events)) md.events = [];
     if (!Array.isArray(md.cart)) md.cart = [];
     if (!Array.isArray(md.holidays)) {
       // “星际国庆节｜陪卿卿……”这种：竖线前是节日，后面的安排留在日程里
@@ -554,6 +556,47 @@
     c.eventSource.on(c.event_types.CHAT_CHANGED, () => { if (quote) setQuote(null); });
   })();
 
+  // ---------- 📅 注入本周日程：从剧情里的今天起 7 天，回复时悄悄给 AI，只读不改数据 ----------
+  const WEEK_KEY = 'xsj-phone-week';
+  const WEEKDAY = '日一二三四五六';
+  function weekText() {
+    const sd = storyDate();
+    const start = new Date(sd.y, sd.m - 1, sd.d);
+    const lines = [];
+    for (let i = 0; i < 7; i++) {
+      const d = new Date(start); d.setDate(start.getDate() + i);
+      const y = d.getFullYear(), m = d.getMonth() + 1, dd = d.getDate();
+      const key = `${y}-${pad(m)}-${pad(dd)}`;
+      const mon = chat.months?.[ym(y, m)] || {};
+      const parts = [];
+      for (const b of chat.birthdays || []) if (b.md === `${pad(m)}-${pad(dd)}`) parts.push(`${b.kind === '纪念日' ? '💝' : '🎂'} ${b.who}${b.kind === '纪念日' ? '' : '生日'}`);
+      for (const h of mon.holidays || []) {
+        if (h.kind === VAC) { if (key >= h.date && key <= (h.end || h.date) && (i === 0 || key === h.date)) parts.push(`${h.name}（放假到 ${+String(h.end || h.date).slice(5, 7)}/${+String(h.end || h.date).slice(8, 10)}）`); }
+        else if (h.date === key) parts.push(`🎉 ${h.name}`);
+      }
+      for (const it of (mon.schedule || []).filter((x) => x.date === key).sort((a, b) => String(a.time).localeCompare(String(b.time)))) {
+        parts.push(`${it.time ? it.time + ' ' : ''}${it.title}${it.place ? ' @' + it.place : ''}`);
+      }
+      if (!parts.length) continue;
+      const label = i === 0 ? '今天' : i === 1 ? '明天' : `${m}/${dd} 周${WEEKDAY[d.getDay()]}`;
+      lines.push(`${label}：${parts.join('；')}`);
+    }
+    if (!lines.length) return '';
+    return [`[${ownerName()} 接下来一周的安排（今天是 ${sd.m}月${sd.d}日 周${WEEKDAY[start.getDay()]}）]`, ...lines,
+      '只在剧情自然走到相关的时间、地点或人物时参考，不要主动念日程，也不要反复提醒。'].join('\n');
+  }
+  function applyWeek() {
+    try { stCtx()?.setExtensionPrompt?.(WEEK_KEY, settings.weekInject ? weekText() : '', 1, 4, false, 0); } // 插在聊天里，深度 4，system
+    catch (e) { console.warn('[小手机] 注入本周日程失败', e); }
+  }
+  // 每次开始生成前重算一遍（剧情日期、日程都可能变了），事件在拼提示词之前触发
+  (function hookWeekEvents() {
+    const c = stCtx();
+    if (!c?.eventSource || !c.event_types?.GENERATION_STARTED) return;
+    c.eventSource.on(c.event_types.GENERATION_STARTED, applyWeek);
+    applyWeek();
+  })();
+
   // ---------- 页内确认框（不用 window.confirm） ----------
   function ask(msg, okText = '确定') {
     return new Promise((resolve) => {
@@ -926,6 +969,16 @@
           ? chat.birthdays.slice().sort((a, b) => a.md.localeCompare(b.md)).map((b) => `<div class="xsj-fixed"><span>${b.kind === '纪念日' ? '💝' : '🎂'} ${esc(b.who)}</span><em>${+b.md.split('-')[0]}月${+b.md.split('-')[1]}日${b.manual ? ' · 自记' : ''}</em></div>`).join('')
           : `<small class="xsj-set-tip">${chat.birthdaysDone ? '设定里没找到写明日期的，可以在日历点「＋」选「生日」自己加' : '第一次生成日历时会找一次，之后固定'}</small>`}
         <button data-act="regen-bd" class="xsj-regen">↻ 重新从设定里找（保留自记）</button>
+      </div>
+
+      <div class="xsj-card xsj-set">
+        <div class="xsj-set-h">📅 注入本周日程</div>
+        <label class="xsj-check"><input type="checkbox" data-set="weekInject" ${settings.weekInject ? 'checked' : ''}> 回复时把接下来 7 天的安排悄悄给 AI</label>
+        ${(() => {
+          const wt = weekText();
+          if (!wt) return '<small class="xsj-set-tip">接下来 7 天还没有安排，先去「日程」生成这个月的日程。</small>';
+          return `<small class="xsj-set-tip">${settings.weekInject ? '现在每次回复都会附上：' : '打开后每次回复会附上：'}（约 ${wt.length} 字，不写进聊天记录）</small><pre class="xsj-weekpre">${esc(wt)}</pre><small class="xsj-set-tip">日期不对的话，在上面「剧情日期」手动填。</small>`;
+        })()}
       </div>
 
       <div class="xsj-card xsj-set">
@@ -1544,6 +1597,11 @@
   function openApiEditor(i) { if (view.apiEdit !== i) { view.apiModels = null; view.apiDraft = null; } view.apiEdit = i; view.apiDel = false; }
   function closeApiEditor() { view.apiEdit = null; view.apiDraft = null; view.apiModels = null; view.apiDel = false; }
   function onChange(ev) {
+    if (ev.target.matches?.('[data-set="weekInject"]')) {
+      settings.weekInject = ev.target.checked; saveSettings(settings); applyWeek();
+      toast(settings.weekInject ? '已开启：回复时会附上本周日程' : '已关闭本周日程注入', 'info');
+      return render();
+    }
     if (ev.target.id === 'xsj-wp-file' && ev.target.files?.[0]) uploadWallpaper(ev.target.files[0]);
   }
 
@@ -1952,6 +2010,8 @@
 #xsj-quote{display:flex;align-items:center;gap:8px;margin:0 6px 4px;padding:5px 6px 5px 12px;border-radius:12px;background:rgba(232,106,149,.16);border:1px solid rgba(232,106,149,.45);font-size:12.5px;line-height:1.4;color:var(--SmartThemeBodyColor,#eee)}#xsj-quote>span{flex:1;min-width:0}#xsj-quote small{display:block;opacity:.6;font-size:11px}#xsj-quote button{flex:none;width:26px;height:26px;border:0;border-radius:50%;background:rgba(255,255,255,.15);color:inherit;font-size:15px;cursor:pointer}
 #${ROOT_ID} .xsj-xquote{margin:0;padding:0 4px;border:0!important;background:none!important;box-shadow:none!important;font-size:14px;opacity:.75;color:#536471}
 .xsj-note-acts{margin:4px 0}
+.xsj-weekpre{white-space:pre-wrap;word-break:break-all;font-family:inherit;font-size:12px;line-height:1.55;margin:6px 0;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,.55);max-height:220px;overflow:auto}
+#${ROOT_ID} .tone-dark .xsj-weekpre{background:rgba(255,255,255,.07)}
 .xsj-spin{width:28px;height:28px;border:3px solid #f5c6d6;border-top-color:#e86a95;border-radius:50%;animation:xsjspin 1s linear infinite}
 @keyframes xsjspin{to{transform:rotate(360deg)}}
 .xsj-ask-card{background:#fff;border-radius:16px;padding:16px;width:80%;box-shadow:0 6px 20px rgba(0,0,0,.12);line-height:1.6}
