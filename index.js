@@ -84,8 +84,31 @@
     try {
       const v = getVariables({ type: 'script' }) || {};
       const d = defaultSettings();
-      return { ...d, ...v, api: { ...d.api, ...(v.api || {}) } };
-    } catch (e) { return defaultSettings(); }
+      return normalizeApi({ ...d, ...v, api: { ...d.api, ...(v.api || {}) } });
+    } catch (e) { return normalizeApi(defaultSettings()); }
+  }
+  // API 方案：apiProfiles 是几套「名字+地址+Key+模型」，apiActive = -1 表示跟随酒馆主 API，否则是第几套
+  function normalizeApi(s) {
+    const blank = (i) => ({ name: `方案${i + 1}`, url: '', key: '', model: '' });
+    const profs = Array.isArray(s.apiProfiles) ? s.apiProfiles.filter((p) => p && typeof p === 'object') : [];
+    if (!Number.isInteger(s.apiActive)) {
+      // 旧版只有一套：当时没勾「用酒馆的」就把它收成一个方案
+      s.apiActive = -1;
+      if (!s.api.useTavern && s.api.url) {
+        let i = profs.findIndex((p) => p.url === s.api.url && p.key === s.api.key && p.model === s.api.model);
+        if (i < 0) { profs.unshift({ name: '方案1', url: s.api.url, key: s.api.key, model: s.api.model }); i = 0; }
+        s.apiActive = i;
+      }
+    }
+    while (profs.length < 3) profs.push(blank(profs.length));
+    s.apiProfiles = profs.map((p, i) => ({ name: String(p.name || blank(i).name), url: p.url || '', key: p.key || '', model: p.model || '' }));
+    if (s.apiActive >= s.apiProfiles.length) s.apiActive = -1;
+    applyApi(s);
+    return s;
+  }
+  function applyApi(s) {
+    const p = s.apiActive >= 0 ? s.apiProfiles[s.apiActive] : null;
+    s.api = p ? { useTavern: false, url: p.url, key: p.key, model: p.model } : { useTavern: true, url: '', key: '', model: '' };
   }
   function saveSettings(s) { try { replaceVariables(s, { type: 'script' }); } catch (e) { console.warn('[小手机] 保存设置失败', e); } }
   function loadChat() {
@@ -99,7 +122,7 @@
 
   let settings = loadSettings();
   let chat = loadChat();
-  const view = { tab: 'cal', month: '', day: '', editing: null, busy: null, note: null, noteCat: '推荐', place: null, mapEdit: false, mapZoom: 1 };
+  const view = { apiEdit: null, apiDraft: null, apiModels: null, apiDel: false, apiBusy: false, tab: 'cal', month: '', day: '', editing: null, busy: null, note: null, noteCat: '推荐', place: null, mapEdit: false, mapZoom: 1 };
 
   // ---------- 工具 ----------
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -750,8 +773,8 @@
 
   function settingsView() {
     const sd = detectStoryDate();
-    const a = settings.api;
-    const profs = Array.isArray(settings.apiProfiles) ? settings.apiProfiles : (settings.apiProfiles = []);
+    const profs = settings.apiProfiles, act = settings.apiActive;
+    const ed = view.apiEdit != null && profs[view.apiEdit] ? { ...profs[view.apiEdit], ...(view.apiDraft || {}) } : null;
     const [gy, gm] = view.month.split('-').map(Number);
     const md = monthData(view.month);
     const filled = [md.schedule.length && '日程', md.events.length && '随机', (md.season || notesFor(md).items.length) && '小红书'].filter(Boolean);
@@ -801,19 +824,24 @@
 
       <div class="xsj-card xsj-set">
         <div class="xsj-set-h">🔌 生成用的 API</div>
-        <label class="xsj-check"><input type="checkbox" data-set="useTavern" ${a.useTavern ? 'checked' : ''}> 用酒馆当前连接的 API</label>
-        ${profs.length ? `<div class="xsj-profs">${profs.map((pr, i) => {
-          const on = !a.useTavern && pr.url === a.url && pr.key === a.key && pr.model === a.model;
-          return `<span class="xsj-prof${on ? ' on' : ''}"><button data-act="use-prof" data-i="${i}">${on ? '✓ ' : ''}${esc(pr.name)}</button><button data-act="del-prof" data-i="${i}" class="xsj-prof-x${view.delProf === i ? ' armed' : ''}" title="删除">${view.delProf === i ? '再点删除' : '×'}</button></span>`;
-        }).join('')}</div><small class="xsj-set-tip">点名字就换成那一套，马上生效。</small>` : ''}
-        <div class="${a.useTavern ? 'xsj-off' : ''}">
-          <div class="xsj-row2"><input data-set="url" placeholder="地址，如 https://xxx/v1" value="${esc(a.url)}" autocomplete="off" autocapitalize="off" spellcheck="false"><button data-act="paste" data-for="url" class="xsj-nowrap" title="粘贴">📋</button></div>
-          <div class="xsj-row2"><input data-set="key" type="text" class="xsj-secret" placeholder="Key" value="${esc(a.key)}" autocomplete="off" autocapitalize="off" spellcheck="false"><button data-act="peek" class="xsj-nowrap" title="显示/隐藏">👁</button><button data-act="paste" data-for="key" class="xsj-nowrap" title="粘贴">📋</button></div>
-          <div class="xsj-row2"><input data-set="model" list="xsj-models" placeholder="模型名" value="${esc(a.model)}"><button data-act="models" class="xsj-nowrap">获取模型</button></div>
-          <datalist id="xsj-models"></datalist>
-          <div class="xsj-row2"><input data-set="profName" placeholder="备注名，如「主力 Claude」" value="${esc(profs.find((pr) => pr.url === a.url && pr.key === a.key && pr.model === a.model)?.name || '')}"><button data-act="save-prof" class="xsj-nowrap">存成一套</button></div>
-          <small class="xsj-set-tip">Key 只存在这台电脑的酒馆设置里，不会写进聊天。</small>
+        <div class="xsj-profs">
+          <button data-act="use-api" data-i="-1" class="xsj-prof${act < 0 ? ' on' : ''}">${act < 0 ? '✓ ' : ''}跟随主 API</button>
+          ${profs.map((pr, i) => `<button data-act="use-api" data-i="${i}" class="xsj-prof${act === i ? ' on' : ''}${view.apiEdit === i ? ' open' : ''}">${act === i ? '✓ ' : ''}${esc(pr.name)}${pr.url ? '' : ' <i>空</i>'}</button>`).join('')}
+          <button data-act="add-api" class="xsj-prof xsj-prof-add" title="新建方案">＋</button>
         </div>
+        <small class="xsj-set-tip">${act < 0 ? '现在用酒馆当前连接的 API。' : `现在用「${esc(profs[act].name)}」${profs[act].model ? ' · ' + esc(profs[act].model) : ''}。`}点方案切换并打开编辑，再点一下收起。</small>
+        ${ed ? `<div class="xsj-apied">
+          <input data-ap="name" placeholder="方案名字" value="${esc(ed.name)}">
+          <div class="xsj-row2"><input data-ap="url" placeholder="地址，如 https://xxx/v1" value="${esc(ed.url)}" autocomplete="off" autocapitalize="off" spellcheck="false"><button data-act="paste" data-for="url" class="xsj-nowrap" title="粘贴">📋</button></div>
+          <div class="xsj-row2"><input data-ap="key" type="text" class="xsj-secret" placeholder="Key" value="${esc(ed.key)}" autocomplete="off" autocapitalize="off" spellcheck="false"><button data-act="peek" class="xsj-nowrap" title="显示/隐藏">👁</button><button data-act="paste" data-for="key" class="xsj-nowrap" title="粘贴">📋</button></div>
+          <div class="xsj-row2"><input data-ap="model" placeholder="模型名（手填，或获取后点选）" value="${esc(ed.model)}" autocomplete="off" autocapitalize="off" spellcheck="false"><button data-act="models" class="xsj-nowrap">${view.apiBusy ? '获取中…' : '获取模型'}</button></div>
+          ${view.apiModels ? `<div class="xsj-models">
+            <input data-ap="filter" placeholder="搜索 ${view.apiModels.length} 个模型" autocomplete="off" autocapitalize="off" spellcheck="false">
+            <div class="xsj-mlist">${view.apiModels.map((m) => `<button data-act="pick-model" data-m="${esc(m)}" class="${m === ed.model ? 'on' : ''}">${esc(m)}</button>`).join('') || '<small class="xsj-set-tip">没有拿到模型名，请手填。</small>'}</div>
+          </div>` : ''}
+          <div class="xsj-row2"><button data-act="del-api" class="xsj-danger">${view.apiDel ? '再点一次删除' : '删除方案'}</button><span><button data-act="close-api">收起</button><button data-act="save-api" class="xsj-primary">保存并使用</button></span></div>
+          <small class="xsj-set-tip">Key 只存在这台设备的酒馆设置里，不会写进聊天。</small>
+        </div>` : ''}
       </div>
       <button data-act="save-set" class="xsj-primary xsj-block">保存设置</button>
       ${lastRaw ? `<details class="xsj-raw"><summary>上次没解析成功的 AI 返回（排查用）</summary><pre>${esc(lastRaw)}</pre></details>` : ''}`;
@@ -1264,63 +1292,79 @@
         if (e) { e[act] = !e[act]; saveChat(); render(); }
         return;
       }
-      case 'save-prof': {
-        syncSettings();
-        const name = D.getElementById(ROOT_ID)?.querySelector('[data-set="profName"]')?.value.trim();
-        if (!name) return toast('先填一个备注名', 'warning');
-        if (!settings.api.url) return toast('地址是空的，先填地址', 'warning');
-        const prof = { name, url: settings.api.url, key: settings.api.key, model: settings.api.model };
-        const i = settings.apiProfiles.findIndex((pr) => pr.name === name);
-        if (i >= 0) settings.apiProfiles[i] = prof; else settings.apiProfiles.push(prof);
-        settings.api.useTavern = false;
-        saveSettings(settings); view.delProf = null;
-        toast(i >= 0 ? `已更新「${name}」` : `已存成「${name}」`, 'success');
-        return render();
-      }
-      case 'use-prof': {
-        const pr = settings.apiProfiles?.[+t.dataset.i];
-        if (!pr) return;
-        syncSettings();
-        settings.api = { ...settings.api, useTavern: false, url: pr.url, key: pr.key, model: pr.model };
-        saveSettings(settings); view.delProf = null;
-        toast(`已换成「${pr.name}」`, 'success');
-        return render();
-      }
-      case 'del-prof': {
+      case 'use-api': {
         const i = +t.dataset.i;
-        if (view.delProf !== i) { view.delProf = i; syncSettings(); return render(); }
-        const [gone] = settings.apiProfiles.splice(i, 1);
-        view.delProf = null; syncSettings(); saveSettings(settings);
-        toast(`已删除「${gone?.name}」（当前填着的地址和 Key 不变）`, 'info');
+        readApiDraft();
+        if (i >= 0 && view.apiEdit === i && settings.apiActive === i) { closeApiEditor(); return render(); }
+        settings.apiActive = i; applyApi(settings); saveSettings(settings);
+        if (i < 0) closeApiEditor(); else openApiEditor(i);
+        toast(i < 0 ? '已改成跟随主 API' : `已换成「${settings.apiProfiles[i].name}」`, 'success');
         return render();
+      }
+      case 'add-api': {
+        readApiDraft();
+        settings.apiProfiles.push({ name: `方案${settings.apiProfiles.length + 1}`, url: '', key: '', model: '' });
+        saveSettings(settings); openApiEditor(settings.apiProfiles.length - 1);
+        return render();
+      }
+      case 'close-api': closeApiEditor(); return render();
+      case 'save-api': {
+        const i = view.apiEdit; if (i == null) return;
+        readApiDraft();
+        const d = { ...settings.apiProfiles[i], ...view.apiDraft };
+        d.name = d.name.trim() || `方案${i + 1}`;
+        if (!d.url) return toast('地址是空的', 'warning');
+        if (!d.model) return toast('还没选模型', 'warning');
+        settings.apiProfiles[i] = d; settings.apiActive = i; applyApi(settings); saveSettings(settings);
+        closeApiEditor(); toast(`已保存并使用「${d.name}」`, 'success');
+        return render();
+      }
+      case 'del-api': {
+        const i = view.apiEdit; if (i == null) return;
+        readApiDraft();
+        if (!view.apiDel) { view.apiDel = true; return render(); }
+        const [gone] = settings.apiProfiles.splice(i, 1);
+        if (settings.apiActive === i) settings.apiActive = -1; else if (settings.apiActive > i) settings.apiActive--;
+        normalizeApi(settings); saveSettings(settings); closeApiEditor();
+        toast(`已删除「${gone?.name}」`, 'info');
+        return render();
+      }
+      case 'pick-model': {
+        const input = D.getElementById(ROOT_ID)?.querySelector('[data-ap="model"]');
+        if (input) input.value = t.dataset.m;
+        D.getElementById(ROOT_ID)?.querySelectorAll('.xsj-mlist button').forEach((b) => b.classList.toggle('on', b === t));
+        return;
       }
       case 'peek': {
-        D.getElementById(ROOT_ID)?.querySelector('[data-set="key"]')?.classList.toggle('xsj-secret');
+        D.getElementById(ROOT_ID)?.querySelector('[data-ap="key"]')?.classList.toggle('xsj-secret');
         return;
       }
       case 'paste': {
-        const input = D.getElementById(ROOT_ID)?.querySelector(`[data-set="${t.dataset.for}"]`);
+        const input = D.getElementById(ROOT_ID)?.querySelector(`[data-ap="${t.dataset.for}"]`);
         if (!input) return;
         try {
           if (!W.navigator.clipboard?.readText) throw new Error('no clipboard');
           const text = (await W.navigator.clipboard.readText()).trim();
           if (!text) return toast('剪贴板是空的', 'warning');
           input.value = text;
-          toast('已粘贴，记得点「保存设置」', 'success');
         } catch (e) {
           input.focus();
-          toast('这个浏览器不让网页读剪贴板，请长按输入框粘贴（Key 框现在也能长按粘贴了）', 'warning');
+          toast('这个浏览器不让网页读剪贴板，请长按输入框粘贴', 'warning');
         }
         return;
       }
       case 'models': {
-        syncSettings();
+        readApiDraft();
+        const d = view.apiDraft || {};
+        if (!d.url) return toast('先填地址', 'warning');
+        view.apiBusy = true; render();
         try {
-          const list = await getModelList({ apiurl: settings.api.url, key: settings.api.key });
-          D.getElementById('xsj-models').innerHTML = (list || []).map((x) => `<option value="${esc(x)}">`).join('');
-          toast(`找到 ${list?.length || 0} 个模型`, 'success');
+          const list = await getModelList({ apiurl: d.url, key: d.key });
+          view.apiModels = (list || []).map((x) => (typeof x === 'string' ? x : x?.id || x?.name || '')).filter(Boolean).sort();
+          if (!view.apiModels.length) toast('这个地址没有返回模型列表，请手填模型名', 'warning');
         } catch (e) { toast('获取失败：' + (e?.message || e), 'error'); }
-        return;
+        view.apiBusy = false;
+        return render();
       }
       case 'save-set': {
         syncSettings(); saveSettings(settings); saveChat();
@@ -1336,11 +1380,20 @@
   function syncSettings() {
     const root = D.getElementById(ROOT_ID);
     const get = (k) => root.querySelector(`[data-set="${k}"]`);
-    chat.dateOverride = get('dateOverride').value.trim();
-    settings.api = { useTavern: get('useTavern').checked, url: get('url').value.trim(), key: get('key').value.trim(), model: get('model').value.trim() };
+    if (get('dateOverride')) chat.dateOverride = get('dateOverride').value.trim();
+    readApiDraft();
   }
+  // 方案编辑框里没保存的内容先记在 view 里，重画界面时不会丢
+  function readApiDraft() {
+    const root = D.getElementById(ROOT_ID);
+    if (!root || view.apiEdit == null) return;
+    const d = {};
+    for (const k of ['name', 'url', 'key', 'model']) { const el = root.querySelector(`[data-ap="${k}"]`); if (el) d[k] = el.value.trim(); }
+    if (Object.keys(d).length) view.apiDraft = d;
+  }
+  function openApiEditor(i) { if (view.apiEdit !== i) { view.apiModels = null; view.apiDraft = null; } view.apiEdit = i; view.apiDel = false; }
+  function closeApiEditor() { view.apiEdit = null; view.apiDraft = null; view.apiModels = null; view.apiDel = false; }
   function onChange(ev) {
-    if (ev.target.matches?.('[data-set="useTavern"]')) { syncSettings(); render(); }
     if (ev.target.id === 'xsj-wp-file' && ev.target.files?.[0]) uploadWallpaper(ev.target.files[0]);
   }
 
@@ -1413,6 +1466,11 @@
     setupPhoneResize(root);
     root.addEventListener('click', onClick);
     root.addEventListener('change', onChange);
+    root.addEventListener('input', (ev) => {
+      if (!ev.target.matches?.('[data-ap="filter"]')) return;
+      const q = ev.target.value.trim().toLowerCase();
+      ev.target.parentElement.querySelectorAll('.xsj-mlist button').forEach((b) => { b.style.display = !q || b.dataset.m.toLowerCase().includes(q) ? '' : 'none'; });
+    });
     root.addEventListener('focusin', (ev) => {
       if (!typing()) return;
       // 键盘弹出后，把正在填的那一栏滚到手机屏幕里看得见的地方
@@ -1689,7 +1747,8 @@
 .xsj-form{background:#fff;border-radius:14px;padding:10px;margin-bottom:8px}
 .xsj-row2{display:flex;gap:6px;align-items:center;justify-content:space-between}
 .xsj-row2 button{padding:6px 10px}
-.xsj-profs{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 2px}.xsj-prof{display:inline-flex;align-items:stretch;border-radius:999px;overflow:hidden;border:1px solid rgba(214,92,140,.35);background:rgba(255,255,255,.6)}.xsj-prof button{margin:0!important;border:0!important;border-radius:0!important;background:none!important;padding:5px 10px!important;font-size:13px;color:inherit;box-shadow:none!important}.xsj-prof .xsj-prof-x{padding:5px 8px!important;opacity:.55;border-left:1px solid rgba(214,92,140,.25)!important}.xsj-prof .xsj-prof-x.armed{opacity:1;color:#fff;background:#e0556f!important;font-size:12px}.xsj-prof.on{background:#d65c8c;border-color:#d65c8c;color:#fff}
+.xsj-profs{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 4px}#${ROOT_ID} .xsj-prof{margin:0;padding:6px 12px;border-radius:999px;border:1px solid rgba(214,92,140,.35);background:rgba(255,255,255,.6);font-size:13px;color:inherit;box-shadow:none}#${ROOT_ID} .xsj-prof i{font-style:normal;font-size:11px;opacity:.5}#${ROOT_ID} .xsj-prof.on{background:#d65c8c;border-color:#d65c8c;color:#fff}#${ROOT_ID} .xsj-prof.on i{opacity:.8}#${ROOT_ID} .xsj-prof.open{box-shadow:0 0 0 2px rgba(214,92,140,.3)}#${ROOT_ID} .xsj-prof-add{opacity:.7}
+.xsj-apied{margin-top:8px;padding-top:8px;border-top:1px dashed rgba(214,92,140,.3)}.xsj-models{margin:4px 0 6px}.xsj-mlist{max-height:180px;overflow-y:auto;display:flex;flex-direction:column;gap:2px;border-radius:10px;background:rgba(255,255,255,.5);padding:4px}#${ROOT_ID} .xsj-mlist button{margin:0;text-align:left;padding:7px 10px;border:0;border-radius:8px;background:none;font-size:13px;word-break:break-all;color:inherit;box-shadow:none}#${ROOT_ID} .xsj-mlist button.on{background:#d65c8c;color:#fff}
 .xsj-chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
 .xsj-chips button{padding:4px 10px;border-radius:12px;font-size:12px;border:1px solid var(--c)!important;color:var(--c)!important}
 .xsj-chips button.on{background:var(--c)!important;color:#fff!important}
@@ -1928,7 +1987,7 @@
 #${ROOT_ID} .tone-dark .xsj-tabs button.on{color:#ff9cc0!important}
 #${ROOT_ID} .tone-dark :is(.xsj-status,.xsj-head,.xsj-sub,.xsj-hint,.xsj-none,.xsj-regen,.xsj-plat,.xsj-xmeta,.xsj-xnote){text-shadow:0 1px 8px rgba(0,0,0,.55)}
 #${ROOT_ID} .tone-dark :is(.xsj-head button,.xsj-maptools button){background:rgba(255,255,255,.1)!important;border-color:rgba(255,255,255,.14)!important}
-#${ROOT_ID} .tone-dark .xsj-prof:not(.on){background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.2)}
+#${ROOT_ID} .tone-dark .xsj-prof:not(.on){background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.2)}#${ROOT_ID} .tone-dark .xsj-mlist{background:rgba(255,255,255,.06)}
 #${ROOT_ID} .tone-dark input{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.16);color:#f1ecf5}
 #${ROOT_ID} .tone-dark input::placeholder{color:rgba(241,236,245,.45)}
 #${ROOT_ID} .tone-dark :is(.xsj-week span.is-wkd,.xsj-day.is-wkd span){color:#ff9cc0}
