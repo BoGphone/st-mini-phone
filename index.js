@@ -1283,8 +1283,9 @@
     view.month = ym(sd.y, sd.m); view.day = dateKey(sd); view.editing = null; view.note = null;
     const root = D.createElement('div');
     root.id = ROOT_ID;
-    root.innerHTML = `<div class="xsj-phone"><div class="xsj-notch"></div><button class="xsj-close" title="关闭">×</button><div class="xsj-drag" title="拖动小手机（双击回到默认位置）"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 1 5.6 3.4h1.6V7.2H3.4V5.6L1 8l2.4 2.4V8.8h3.8v3.8H5.6L8 15l2.4-2.4H8.8V8.8h3.8v1.6L15 8l-2.4-2.4v1.6H8.8V3.4h1.6z"/></svg></div><div class="xsj-screen"></div></div>`;
+    root.innerHTML = `<div class="xsj-phone"><div class="xsj-notch"></div><button class="xsj-close" title="关闭">×</button><div class="xsj-resize" title="拖动调整大小（双击恢复默认大小）"><svg width="14" height="14" viewBox="0 0 14 14"><path d="M1 1h5L4.3 2.7l7 7L13 8v5H8l1.7-1.7-7-7L1 6z"/></svg></div><div class="xsj-drag" title="拖动小手机（双击回到默认位置）"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 1 5.6 3.4h1.6V7.2H3.4V5.6L1 8l2.4 2.4V8.8h3.8v3.8H5.6L8 15l2.4-2.4H8.8V8.8h3.8v1.6L15 8l-2.4-2.4v1.6H8.8V3.4h1.6z"/></svg></div><div class="xsj-screen"></div></div>`;
     setupPhoneDrag(root);
+    setupPhoneResize(root);
     root.addEventListener('click', onClick);
     root.addEventListener('change', onChange);
     root.addEventListener('pointerdown', onPointerDown);
@@ -1304,8 +1305,15 @@
     const vw = Math.round(vv?.width || W.innerWidth || D.documentElement.clientWidth || 360);
     const vh = Math.round(vv?.height || W.innerHeight || D.documentElement.clientHeight || 640);
     const small = vw <= 600;
-    phone.style.width = Math.max(240, Math.min(340, vw - (small ? 16 : 32))) + 'px';
-    phone.style.height = Math.max(Math.min(360, vh - 16), Math.min(680, vh - (small ? 24 : 90))) + 'px';
+    const us = userSize();
+    if (us) {
+      // 用户自己拖过大小：按那个大小，只是不能超出屏幕
+      phone.style.width = Math.max(Math.min(MIN_W, vw - 16), Math.min(us.w, vw - 16)) + 'px';
+      phone.style.height = Math.max(Math.min(MIN_H, vh - 16), Math.min(us.h, vh - 16)) + 'px';
+    } else {
+      phone.style.width = Math.max(240, Math.min(340, vw - (small ? 16 : 32))) + 'px';
+      phone.style.height = Math.max(Math.min(360, vh - 16), Math.min(680, vh - (small ? 24 : 90))) + 'px';
+    }
     phone.style.maxWidth = 'none';
     phone.style.maxHeight = 'none';
     const wrap = D.querySelector(`#${ROOT_ID} .xsj-mapwrap`);
@@ -1313,6 +1321,53 @@
   }
   W.addEventListener('resize', fitPhone);
   W.visualViewport?.addEventListener('resize', fitPhone);
+
+  // ---------- 左上角调整大小：右下角不动，往外拉变大、往里推变小 ----------
+  const PHONE_SIZE_KEY = 'xsj-phone-size';
+  const MIN_W = 260, MIN_H = 420;
+  function userSize() {
+    try { const s = JSON.parse(W.localStorage.getItem(PHONE_SIZE_KEY) || 'null'); return s && Number.isFinite(s.w) ? s : null; } catch (e) { return null; }
+  }
+  function setupPhoneResize(root) {
+    const handle = root.querySelector('.xsj-resize');
+    const phone = root.querySelector('.xsj-phone');
+    let start = null;
+    handle.addEventListener('pointerdown', (ev) => {
+      ev.preventDefault();
+      const r = root.getBoundingClientRect();
+      // 先把位置固定成左上角坐标，拉的时候右下角才不会跟着动
+      Object.assign(root.style, { left: r.left + 'px', top: r.top + 'px', right: 'auto', transform: 'none' });
+      start = { px: ev.clientX, py: ev.clientY, w: phone.offsetWidth, h: phone.offsetHeight, right: r.right, bottom: r.bottom, done: null };
+      handle.setPointerCapture(ev.pointerId);
+      root.classList.add('is-moving');
+    });
+    handle.addEventListener('pointermove', (ev) => {
+      if (!start) return;
+      const w = Math.round(Math.min(Math.max(MIN_W, start.w - (ev.clientX - start.px)), start.right - 8));
+      const h = Math.round(Math.min(Math.max(MIN_H, start.h - (ev.clientY - start.py)), start.bottom - 8));
+      phone.style.width = w + 'px'; phone.style.height = h + 'px';
+      root.style.left = start.right - w + 'px'; root.style.top = start.bottom - h + 'px';
+      start.done = { w, h, x: start.right - w, y: start.bottom - h };
+    });
+    const end = () => {
+      if (!start) return;
+      if (start.done) {
+        try {
+          W.localStorage.setItem(PHONE_SIZE_KEY, JSON.stringify({ w: start.done.w, h: start.done.h }));
+          W.localStorage.setItem(PHONE_POS_KEY, JSON.stringify({ x: start.done.x, y: start.done.y }));
+        } catch (e) {}
+        fitPhone();
+      }
+      start = null; root.classList.remove('is-moving');
+    };
+    handle.addEventListener('pointerup', end);
+    handle.addEventListener('pointercancel', end);
+    handle.addEventListener('dblclick', () => {
+      try { W.localStorage.removeItem(PHONE_SIZE_KEY); } catch (e) {}
+      fitPhone();
+      if (root.style.left) placePhone(root, { x: parseFloat(root.style.left), y: parseFloat(root.style.top) });
+    });
+  }
 
   // ---------- 左下角拖动键：拖着整部手机走，位置记在本机浏览器里 ----------
   const PHONE_POS_KEY = 'xsj-phone-pos';
@@ -1549,11 +1604,13 @@
 @supports (aspect-ratio:1/1){.xsj-mapwrap{height:auto}}
 .xsj-drag{position:absolute;left:-10px;bottom:-10px;width:30px;height:30px;border-radius:50%;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.25);display:flex;align-items:center;justify-content:center;z-index:4;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;color:#5a4a5e}
 .xsj-drag svg{fill:currentColor;display:block}
+.xsj-resize{position:absolute;left:-10px;top:-10px;width:30px;height:30px;border-radius:50%;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.25);display:flex;align-items:center;justify-content:center;z-index:4;cursor:nwse-resize;touch-action:none;user-select:none;-webkit-user-select:none;color:#5a4a5e}
+.xsj-resize svg{fill:currentColor;display:block}
 #${ROOT_ID}.is-moving .xsj-drag{cursor:grabbing;transform:scale(1.12)}
 #${ROOT_ID}.is-moving{transition:none}
 #${ROOT_ID}.is-moving .xsj-phone{box-shadow:0 26px 70px rgba(0,0,0,.45)}
 /* 矮屏（手机横屏、小窗口）：边框收窄 */
-@media (max-height:560px){.xsj-close{top:4px!important;right:4px!important;width:26px!important;height:26px!important;font-size:16px!important}.xsj-drag{left:4px!important;bottom:4px!important;width:26px!important;height:26px!important}.xsj-phone{border-radius:28px;padding:6px}.xsj-screen{border-radius:22px!important}.xsj-notch{display:none}.xsj-status{padding-top:8px!important}}
+@media (max-height:560px){.xsj-close{top:4px!important;right:4px!important;width:26px!important;height:26px!important;font-size:16px!important}.xsj-drag{left:4px!important;bottom:4px!important;width:26px!important;height:26px!important}.xsj-resize{left:4px!important;top:4px!important;width:26px!important;height:26px!important}.xsj-phone{border-radius:28px;padding:6px}.xsj-screen{border-radius:22px!important}.xsj-notch{display:none}.xsj-status{padding-top:8px!important}}
 
 /* ---------- 毛玻璃主题（覆盖上面的白底卡片） ---------- */
 .xsj-screen{background:radial-gradient(120% 70% at 0% 0%,#ffd3e3 0%,transparent 55%),radial-gradient(90% 60% at 100% 22%,#dcd6ff 0%,transparent 60%),radial-gradient(100% 70% at 25% 100%,#cbecfb 0%,transparent 62%),linear-gradient(160deg,#fff3f7,#f2f0ff)!important}
