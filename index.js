@@ -751,6 +751,7 @@
   function settingsView() {
     const sd = detectStoryDate();
     const a = settings.api;
+    const profs = Array.isArray(settings.apiProfiles) ? settings.apiProfiles : (settings.apiProfiles = []);
     const [gy, gm] = view.month.split('-').map(Number);
     const md = monthData(view.month);
     const filled = [md.schedule.length && '日程', md.events.length && '随机', (md.season || notesFor(md).items.length) && '小红书'].filter(Boolean);
@@ -801,11 +802,16 @@
       <div class="xsj-card xsj-set">
         <div class="xsj-set-h">🔌 生成用的 API</div>
         <label class="xsj-check"><input type="checkbox" data-set="useTavern" ${a.useTavern ? 'checked' : ''}> 用酒馆当前连接的 API</label>
+        ${profs.length ? `<div class="xsj-profs">${profs.map((pr, i) => {
+          const on = !a.useTavern && pr.url === a.url && pr.key === a.key && pr.model === a.model;
+          return `<span class="xsj-prof${on ? ' on' : ''}"><button data-act="use-prof" data-i="${i}">${on ? '✓ ' : ''}${esc(pr.name)}</button><button data-act="del-prof" data-i="${i}" class="xsj-prof-x${view.delProf === i ? ' armed' : ''}" title="删除">${view.delProf === i ? '再点删除' : '×'}</button></span>`;
+        }).join('')}</div><small class="xsj-set-tip">点名字就换成那一套，马上生效。</small>` : ''}
         <div class="${a.useTavern ? 'xsj-off' : ''}">
           <div class="xsj-row2"><input data-set="url" placeholder="地址，如 https://xxx/v1" value="${esc(a.url)}" autocomplete="off" autocapitalize="off" spellcheck="false"><button data-act="paste" data-for="url" class="xsj-nowrap" title="粘贴">📋</button></div>
           <div class="xsj-row2"><input data-set="key" type="text" class="xsj-secret" placeholder="Key" value="${esc(a.key)}" autocomplete="off" autocapitalize="off" spellcheck="false"><button data-act="peek" class="xsj-nowrap" title="显示/隐藏">👁</button><button data-act="paste" data-for="key" class="xsj-nowrap" title="粘贴">📋</button></div>
           <div class="xsj-row2"><input data-set="model" list="xsj-models" placeholder="模型名" value="${esc(a.model)}"><button data-act="models" class="xsj-nowrap">获取模型</button></div>
           <datalist id="xsj-models"></datalist>
+          <div class="xsj-row2"><input data-set="profName" placeholder="备注名，如「主力 Claude」" value="${esc(profs.find((pr) => pr.url === a.url && pr.key === a.key && pr.model === a.model)?.name || '')}"><button data-act="save-prof" class="xsj-nowrap">存成一套</button></div>
           <small class="xsj-set-tip">Key 只存在这台电脑的酒馆设置里，不会写进聊天。</small>
         </div>
       </div>
@@ -1258,6 +1264,36 @@
         if (e) { e[act] = !e[act]; saveChat(); render(); }
         return;
       }
+      case 'save-prof': {
+        syncSettings();
+        const name = D.getElementById(ROOT_ID)?.querySelector('[data-set="profName"]')?.value.trim();
+        if (!name) return toast('先填一个备注名', 'warning');
+        if (!settings.api.url) return toast('地址是空的，先填地址', 'warning');
+        const prof = { name, url: settings.api.url, key: settings.api.key, model: settings.api.model };
+        const i = settings.apiProfiles.findIndex((pr) => pr.name === name);
+        if (i >= 0) settings.apiProfiles[i] = prof; else settings.apiProfiles.push(prof);
+        settings.api.useTavern = false;
+        saveSettings(settings); view.delProf = null;
+        toast(i >= 0 ? `已更新「${name}」` : `已存成「${name}」`, 'success');
+        return render();
+      }
+      case 'use-prof': {
+        const pr = settings.apiProfiles?.[+t.dataset.i];
+        if (!pr) return;
+        syncSettings();
+        settings.api = { ...settings.api, useTavern: false, url: pr.url, key: pr.key, model: pr.model };
+        saveSettings(settings); view.delProf = null;
+        toast(`已换成「${pr.name}」`, 'success');
+        return render();
+      }
+      case 'del-prof': {
+        const i = +t.dataset.i;
+        if (view.delProf !== i) { view.delProf = i; syncSettings(); return render(); }
+        const [gone] = settings.apiProfiles.splice(i, 1);
+        view.delProf = null; syncSettings(); saveSettings(settings);
+        toast(`已删除「${gone?.name}」（当前填着的地址和 Key 不变）`, 'info');
+        return render();
+      }
       case 'peek': {
         D.getElementById(ROOT_ID)?.querySelector('[data-set="key"]')?.classList.toggle('xsj-secret');
         return;
@@ -1637,6 +1673,7 @@
 .xsj-form{background:#fff;border-radius:14px;padding:10px;margin-bottom:8px}
 .xsj-row2{display:flex;gap:6px;align-items:center;justify-content:space-between}
 .xsj-row2 button{padding:6px 10px}
+.xsj-profs{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0 2px}.xsj-prof{display:inline-flex;align-items:stretch;border-radius:999px;overflow:hidden;border:1px solid rgba(214,92,140,.35);background:rgba(255,255,255,.6)}.xsj-prof button{margin:0!important;border:0!important;border-radius:0!important;background:none!important;padding:5px 10px!important;font-size:13px;color:inherit;box-shadow:none!important}.xsj-prof .xsj-prof-x{padding:5px 8px!important;opacity:.55;border-left:1px solid rgba(214,92,140,.25)!important}.xsj-prof .xsj-prof-x.armed{opacity:1;color:#fff;background:#e0556f!important;font-size:12px}.xsj-prof.on{background:#d65c8c;border-color:#d65c8c;color:#fff}
 .xsj-chips{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}
 .xsj-chips button{padding:4px 10px;border-radius:12px;font-size:12px;border:1px solid var(--c)!important;color:var(--c)!important}
 .xsj-chips button.on{background:var(--c)!important;color:#fff!important}
@@ -1874,6 +1911,7 @@
 #${ROOT_ID} .tone-dark .xsj-tabs button.on{color:#ff9cc0!important}
 #${ROOT_ID} .tone-dark :is(.xsj-status,.xsj-head,.xsj-sub,.xsj-hint,.xsj-none,.xsj-regen,.xsj-plat,.xsj-xmeta,.xsj-xnote){text-shadow:0 1px 8px rgba(0,0,0,.55)}
 #${ROOT_ID} .tone-dark :is(.xsj-head button,.xsj-maptools button){background:rgba(255,255,255,.1)!important;border-color:rgba(255,255,255,.14)!important}
+#${ROOT_ID} .tone-dark .xsj-prof:not(.on){background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.2)}
 #${ROOT_ID} .tone-dark input{background:rgba(255,255,255,.08);border-color:rgba(255,255,255,.16);color:#f1ecf5}
 #${ROOT_ID} .tone-dark input::placeholder{color:rgba(241,236,245,.45)}
 #${ROOT_ID} .tone-dark :is(.xsj-week span.is-wkd,.xsj-day.is-wkd span){color:#ff9cc0}
