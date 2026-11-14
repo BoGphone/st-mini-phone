@@ -1283,7 +1283,8 @@
     view.month = ym(sd.y, sd.m); view.day = dateKey(sd); view.editing = null; view.note = null;
     const root = D.createElement('div');
     root.id = ROOT_ID;
-    root.innerHTML = `<div class="xsj-phone"><div class="xsj-notch"></div><button class="xsj-close" title="关闭">×</button><div class="xsj-screen"></div></div>`;
+    root.innerHTML = `<div class="xsj-phone"><div class="xsj-notch"></div><button class="xsj-close" title="关闭">×</button><div class="xsj-drag" title="拖动小手机（双击回到默认位置）"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 1 5.6 3.4h1.6V7.2H3.4V5.6L1 8l2.4 2.4V8.8h3.8v3.8H5.6L8 15l2.4-2.4H8.8V8.8h3.8v1.6L15 8l-2.4-2.4v1.6H8.8V3.4h1.6z"/></svg></div><div class="xsj-screen"></div></div>`;
+    setupPhoneDrag(root);
     root.addEventListener('click', onClick);
     root.addEventListener('change', onChange);
     root.addEventListener('pointerdown', onPointerDown);
@@ -1312,6 +1313,52 @@
   }
   W.addEventListener('resize', fitPhone);
   W.visualViewport?.addEventListener('resize', fitPhone);
+
+  // ---------- 左下角拖动键：拖着整部手机走，位置记在本机浏览器里 ----------
+  const PHONE_POS_KEY = 'xsj-phone-pos';
+  function placePhone(root, pos) {
+    const box = root.getBoundingClientRect();
+    const vw = W.innerWidth, vh = W.innerHeight;
+    const x = Math.min(Math.max(8, pos.x), Math.max(8, vw - box.width - 8));
+    const y = Math.min(Math.max(8, pos.y), Math.max(8, vh - box.height - 8));
+    Object.assign(root.style, { left: x + 'px', top: y + 'px', right: 'auto', transform: 'none' });
+    return { x, y };
+  }
+  function resetPhonePos(root) {
+    Object.assign(root.style, { left: '', top: '', right: '', transform: '' });
+    try { W.localStorage.removeItem(PHONE_POS_KEY); } catch (e) {}
+  }
+  function setupPhoneDrag(root) {
+    const handle = root.querySelector('.xsj-drag');
+    let saved = null;
+    try { saved = JSON.parse(W.localStorage.getItem(PHONE_POS_KEY) || 'null'); } catch (e) {}
+    if (saved && Number.isFinite(saved.x)) requestAnimationFrame(() => placePhone(root, saved));
+    let start = null;
+    handle.addEventListener('pointerdown', (ev) => {
+      ev.preventDefault();
+      const r = root.getBoundingClientRect();
+      start = { px: ev.clientX, py: ev.clientY, x: r.left, y: r.top, last: null };
+      handle.setPointerCapture(ev.pointerId);
+      root.classList.add('is-moving');
+    });
+    handle.addEventListener('pointermove', (ev) => {
+      if (!start) return;
+      start.last = placePhone(root, { x: start.x + ev.clientX - start.px, y: start.y + ev.clientY - start.py });
+    });
+    const end = () => {
+      if (!start) return;
+      if (start.last) { try { W.localStorage.setItem(PHONE_POS_KEY, JSON.stringify(start.last)); } catch (e) {} }
+      start = null; root.classList.remove('is-moving');
+    };
+    handle.addEventListener('pointerup', end);
+    handle.addEventListener('pointercancel', end);
+    handle.addEventListener('dblclick', () => resetPhonePos(root));
+  }
+  // 窗口变了大小，手机别跑出屏幕
+  W.addEventListener('resize', () => {
+    const root = D.getElementById(ROOT_ID);
+    if (root && root.style.left) requestAnimationFrame(() => placePhone(root, { x: parseFloat(root.style.left), y: parseFloat(root.style.top) }));
+  });
 
   // ---------- 漂浮的 📱 ----------
   const BUBBLE_ID = 'xsj-bubble';
@@ -1500,8 +1547,13 @@
 #xsj-bubble.is-drag{cursor:grabbing;transform:scale(1.12);opacity:.85;transition:none}
 @media (max-width:600px){#${ROOT_ID}{right:50%;top:50%;transform:translate(50%,-50%)}}
 @supports (aspect-ratio:1/1){.xsj-mapwrap{height:auto}}
+.xsj-drag{position:absolute;left:-10px;bottom:-10px;width:30px;height:30px;border-radius:50%;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.25);display:flex;align-items:center;justify-content:center;z-index:4;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;color:#5a4a5e}
+.xsj-drag svg{fill:currentColor;display:block}
+#${ROOT_ID}.is-moving .xsj-drag{cursor:grabbing;transform:scale(1.12)}
+#${ROOT_ID}.is-moving{transition:none}
+#${ROOT_ID}.is-moving .xsj-phone{box-shadow:0 26px 70px rgba(0,0,0,.45)}
 /* 矮屏（手机横屏、小窗口）：边框收窄 */
-@media (max-height:560px){.xsj-close{top:4px!important;right:4px!important;width:26px!important;height:26px!important;font-size:16px!important}.xsj-phone{border-radius:28px;padding:6px}.xsj-screen{border-radius:22px!important}.xsj-notch{display:none}.xsj-status{padding-top:8px!important}}
+@media (max-height:560px){.xsj-close{top:4px!important;right:4px!important;width:26px!important;height:26px!important;font-size:16px!important}.xsj-drag{left:4px!important;bottom:4px!important;width:26px!important;height:26px!important}.xsj-phone{border-radius:28px;padding:6px}.xsj-screen{border-radius:22px!important}.xsj-notch{display:none}.xsj-status{padding-top:8px!important}}
 
 /* ---------- 毛玻璃主题（覆盖上面的白底卡片） ---------- */
 .xsj-screen{background:radial-gradient(120% 70% at 0% 0%,#ffd3e3 0%,transparent 55%),radial-gradient(90% 60% at 100% 22%,#dcd6ff 0%,transparent 60%),radial-gradient(100% 70% at 25% 100%,#cbecfb 0%,transparent 62%),linear-gradient(160deg,#fff3f7,#f2f0ff)!important}
