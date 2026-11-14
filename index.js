@@ -823,6 +823,8 @@
     const scr = root.querySelector('.xsj-screen');
     scr.classList.toggle('has-wp', !!settings.wallpaper);
     scr.classList.toggle('tone-dark', glassTone() === 'dark');
+    // 小红书和 X 像真的 App 一样整屏实心底色，不透壁纸
+    scr.classList.toggle('app-white', view.tab === 'x' || view.tab === 'mon');
     if (settings.wallpaper && !settings.wpTone) measureTone();
     if (settings.wallpaper) scr.style.setProperty('--xsj-wp', `url("${settings.wallpaper.replace(/"/g, '%22')}")`);
     else scr.style.removeProperty('--xsj-wp');
@@ -1752,7 +1754,7 @@
 .xsj-xnote{font-size:12px;color:#b2456f!important;padding:4px 6px 0;font-style:italic;text-shadow:0 1px 6px rgba(255,255,255,.95)}
 /* ---------- X 页：照 X 的版式 ---------- */
 #${ROOT_ID} .xsj-body-x{padding:0!important}
-#${ROOT_ID} .xsj-xapp{min-height:100%;background:rgba(255,255,255,.94);color:#0f1419;padding-bottom:14px}
+#${ROOT_ID} .xsj-xapp{min-height:100%;background:transparent;color:#0f1419;padding-bottom:14px}
 #${ROOT_ID} .xsj-xhead{position:relative;display:flex;align-items:center;justify-content:space-between;padding:6px 14px 4px}
 #${ROOT_ID} .xsj-xme{width:30px;height:30px;border-radius:50%;color:#fff!important;font-style:normal;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center}
 #${ROOT_ID} .xsj-xlogo{font-size:24px;font-weight:900;line-height:1}
@@ -1804,7 +1806,7 @@
 #${ROOT_ID} .xsj-xapp .xsj-none{padding:6px 14px;text-shadow:none}
 #${ROOT_ID} .xsj-xapp .xsj-regen{text-shadow:none;color:#536471}
 /* 深色 */
-#${ROOT_ID} .tone-dark .xsj-xapp{background:rgba(0,0,0,.9);color:#e7e9ea}
+#${ROOT_ID} .tone-dark .xsj-xapp{background:transparent;color:#e7e9ea}
 #${ROOT_ID} .tone-dark :is(.xsj-xtabs,.xsj-xasof,.xsj-xpost2){border-color:rgba(231,233,234,.12)}
 #${ROOT_ID} .tone-dark .xsj-xtabs button.on{color:#e7e9ea!important}
 #${ROOT_ID} .tone-dark :is(.xsj-xh,.xsj-xctx,.xsj-xasof,.xsj-xacts span,.xsj-xtabs button){color:#71767b!important}
@@ -1876,6 +1878,24 @@
 #${ROOT_ID} .tone-dark .xsj-spin{border-color:rgba(255,255,255,.2);border-top-color:#ff8fb4}
 #${ROOT_ID} .tone-dark .xsj-mini{background:rgba(255,143,187,.18)!important;color:#ffb3cf!important}
 #${ROOT_ID} .tone-dark .xsj-wpthumb{color:#cfc6d6}
+/* ---------- 小红书和 X：整屏实心白底（深色玻璃时黑底），不透壁纸 ---------- */
+#${ROOT_ID} .xsj-screen.app-white{background:#fff!important}
+#${ROOT_ID} .xsj-screen.app-white.tone-dark{background:#0b0b0d!important}
+#${ROOT_ID} .xsj-screen.app-white::before{display:none}
+#${ROOT_ID} .app-white :is(.xsj-status,.xsj-head,.xsj-sub,.xsj-hint,.xsj-none,.xsj-regen,.xsj-plat,.xsj-xmeta,.xsj-xnote){text-shadow:none!important}
+#${ROOT_ID} .app-white .xsj-tabs{background:#fff!important;border-top:1px solid rgba(0,0,0,.07)!important;box-shadow:none!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+#${ROOT_ID} .app-white.tone-dark .xsj-tabs{background:#0b0b0d!important;border-top-color:rgba(255,255,255,.1)!important}
+#${ROOT_ID} .app-white .xsj-head button{background:#f2f2f4!important;border-color:transparent!important;box-shadow:none!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+#${ROOT_ID} .app-white.tone-dark .xsj-head button{background:#1c1c1f!important}
+#${ROOT_ID} .app-white :is(.xsj-note,.xsj-weather,.xsj-empty,.xsj-card,.xsj-ask-card){-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+#${ROOT_ID} .app-white .xsj-note{background:#fff!important;border:1px solid rgba(0,0,0,.06)!important;box-shadow:0 1px 4px rgba(0,0,0,.06)!important}
+#${ROOT_ID} .app-white :is(.xsj-weather,.xsj-empty){background:#f6f6f8!important;border:0!important;box-shadow:none!important}
+#${ROOT_ID} .app-white .xsj-ask-card{background:#fff!important;border:0!important;box-shadow:0 8px 30px rgba(0,0,0,.18)!important}
+#${ROOT_ID} .app-white.tone-dark .xsj-note{background:#1c1c1f!important;border-color:rgba(255,255,255,.07)!important;box-shadow:none!important}
+#${ROOT_ID} .app-white.tone-dark :is(.xsj-weather,.xsj-empty){background:#1c1c1f!important}
+#${ROOT_ID} .app-white.tone-dark .xsj-ask-card{background:#1c1c1f!important}
+#${ROOT_ID} .app-white :is(.xsj-busy,.xsj-ask){background:rgba(255,255,255,.6)!important}
+#${ROOT_ID} .app-white.tone-dark :is(.xsj-busy,.xsj-ask){background:rgba(0,0,0,.55)!important}
 /* 酒馆开了「禁用模糊」时会用 body.no-blur * 把所有模糊去掉；小手机里的毛玻璃单独保留 */
 #${ROOT_ID} :is(.xsj-cal,.xsj-daycard,.xsj-card,.xsj-note,.xsj-form,.xsj-place,.xsj-loc,.xsj-genall,.xsj-cart,.xsj-weather,.xsj-ask-card,.xsj-wpset,.xsj-mapwrap,.xsj-empty,.xsj-tabs,.xsj-busy,.xsj-ask){-webkit-backdrop-filter:blur(18px) saturate(170%)!important;backdrop-filter:blur(18px) saturate(170%)!important}
 #${ROOT_ID} :is(.xsj-head button,.xsj-maptools button){-webkit-backdrop-filter:blur(14px)!important;backdrop-filter:blur(14px)!important}
