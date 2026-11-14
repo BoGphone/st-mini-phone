@@ -1878,6 +1878,15 @@
 #${ROOT_ID} .tone-dark .xsj-spin{border-color:rgba(255,255,255,.2);border-top-color:#ff8fb4}
 #${ROOT_ID} .tone-dark .xsj-mini{background:rgba(255,143,187,.18)!important;color:#ffb3cf!important}
 #${ROOT_ID} .tone-dark .xsj-wpthumb{color:#cfc6d6}
+/* ---------- 默认壁纸：纯白（没上传壁纸、浅色玻璃时） ---------- */
+#${ROOT_ID} .xsj-screen:not(.has-wp):not(.tone-dark){background:#fff!important}
+#${ROOT_ID} .xsj-screen:not(.has-wp):not(.tone-dark) :is(.xsj-cal,.xsj-daycard,.xsj-card,.xsj-form,.xsj-place,.xsj-loc,.xsj-genall,.xsj-cart,.xsj-wpset,.xsj-mapwrap,.xsj-empty,.xsj-ask-card){
+  background:#f6f6f8!important;border:1px solid rgba(0,0,0,.04)!important;box-shadow:none!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+#${ROOT_ID} .xsj-screen:not(.has-wp):not(.tone-dark) .xsj-day.is-sel{background:#fff!important;box-shadow:0 2px 10px rgba(232,106,149,.22)}
+#${ROOT_ID} .xsj-screen:not(.has-wp):not(.tone-dark) .xsj-tabs{background:#fff!important;border-top:1px solid rgba(0,0,0,.07)!important;box-shadow:none!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}
+#${ROOT_ID} .xsj-screen:not(.has-wp):not(.tone-dark) :is(.xsj-head button,.xsj-maptools button){background:#f2f2f4!important;border-color:transparent!important;box-shadow:none!important}
+#${ROOT_ID} .xsj-screen:not(.has-wp):not(.tone-dark) :is(.xsj-status,.xsj-head,.xsj-sub,.xsj-hint,.xsj-none,.xsj-regen,.xsj-plat){text-shadow:none!important}
+#${ROOT_ID} .xsj-screen:not(.has-wp):not(.tone-dark) .xsj-wpthumb{background:#fff;box-shadow:inset 0 0 0 1px rgba(0,0,0,.08)}
 /* ---------- 小红书和 X：整屏实心白底（深色玻璃时黑底），不透壁纸 ---------- */
 #${ROOT_ID} .xsj-screen.app-white{background:#fff!important}
 #${ROOT_ID} .xsj-screen.app-white.tone-dark{background:#0b0b0d!important}
