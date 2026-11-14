@@ -802,8 +802,8 @@
         <div class="xsj-set-h">🔌 生成用的 API</div>
         <label class="xsj-check"><input type="checkbox" data-set="useTavern" ${a.useTavern ? 'checked' : ''}> 用酒馆当前连接的 API</label>
         <div class="${a.useTavern ? 'xsj-off' : ''}">
-          <input data-set="url" placeholder="地址，如 https://xxx/v1" value="${esc(a.url)}">
-          <input data-set="key" type="password" placeholder="Key" value="${esc(a.key)}">
+          <div class="xsj-row2"><input data-set="url" placeholder="地址，如 https://xxx/v1" value="${esc(a.url)}" autocomplete="off" autocapitalize="off" spellcheck="false"><button data-act="paste" data-for="url" class="xsj-nowrap" title="粘贴">📋</button></div>
+          <div class="xsj-row2"><input data-set="key" type="text" class="xsj-secret" placeholder="Key" value="${esc(a.key)}" autocomplete="off" autocapitalize="off" spellcheck="false"><button data-act="peek" class="xsj-nowrap" title="显示/隐藏">👁</button><button data-act="paste" data-for="key" class="xsj-nowrap" title="粘贴">📋</button></div>
           <div class="xsj-row2"><input data-set="model" list="xsj-models" placeholder="模型名" value="${esc(a.model)}"><button data-act="models" class="xsj-nowrap">获取模型</button></div>
           <datalist id="xsj-models"></datalist>
           <small class="xsj-set-tip">Key 只存在这台电脑的酒馆设置里，不会写进聊天。</small>
@@ -1258,6 +1258,25 @@
         if (e) { e[act] = !e[act]; saveChat(); render(); }
         return;
       }
+      case 'peek': {
+        D.getElementById(ROOT_ID)?.querySelector('[data-set="key"]')?.classList.toggle('xsj-secret');
+        return;
+      }
+      case 'paste': {
+        const input = D.getElementById(ROOT_ID)?.querySelector(`[data-set="${t.dataset.for}"]`);
+        if (!input) return;
+        try {
+          if (!W.navigator.clipboard?.readText) throw new Error('no clipboard');
+          const text = (await W.navigator.clipboard.readText()).trim();
+          if (!text) return toast('剪贴板是空的', 'warning');
+          input.value = text;
+          toast('已粘贴，记得点「保存设置」', 'success');
+        } catch (e) {
+          input.focus();
+          toast('这个浏览器不让网页读剪贴板，请长按输入框粘贴（Key 框现在也能长按粘贴了）', 'warning');
+        }
+        return;
+      }
       case 'models': {
         syncSettings();
         try {
@@ -1537,7 +1556,7 @@
 #${ROOT_ID} *{box-sizing:border-box}
 :where(#${ROOT_ID}) :is(small,em,b,strong,i,h4,label,span,div,p){color:inherit}
 #${ROOT_ID} button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
-#${ROOT_ID} input{font:inherit;width:100%;padding:8px 10px;margin:4px 0;border:1px solid #eadfe6;border-radius:10px;background:#fff;color:#3b3340}
+#${ROOT_ID} input{user-select:text;-webkit-user-select:text;-webkit-touch-callout:default;font:inherit;width:100%;padding:8px 10px;margin:4px 0;border:1px solid #eadfe6;border-radius:10px;background:#fff;color:#3b3340}
 .xsj-phone{position:relative;width:340px;max-width:calc(100vw - 32px);height:680px;max-height:calc(100vh - 90px);max-height:calc(100dvh - 90px);background:#1d1a20;border-radius:42px;padding:10px;box-shadow:0 18px 50px rgba(0,0,0,.35)}
 .xsj-notch{position:absolute;top:16px;left:50%;transform:translateX(-50%);width:84px;height:22px;border-radius:12px;background:#1d1a20;z-index:3}
 .xsj-close{position:absolute!important;top:-10px;right:-10px;width:30px;height:30px;border-radius:50%;background:#fff!important;box-shadow:0 2px 8px rgba(0,0,0,.25);font-size:18px;z-index:4}
@@ -1656,6 +1675,7 @@
 .xsj-cmt{display:flex;gap:8px;padding:8px 2px;font-size:13px;line-height:1.5}
 .xsj-cmt>i{width:26px;height:26px;border-radius:50%;background:#f3dbe4;color:#a0566f;font-style:normal;font-size:12px;display:flex;align-items:center;justify-content:center;flex:none}
 .xsj-cmt>div{flex:1}.xsj-cmt small{opacity:.5;font-size:11px}.xsj-cmt em{font-style:normal;font-size:10.5px;opacity:.45;flex:none}
+#${ROOT_ID} .xsj-secret{-webkit-text-security:disc;text-security:disc}
 .xsj-check{display:flex;align-items:center;gap:6px;font-size:13px}.xsj-check input{width:auto!important;margin:0!important}
 .xsj-off{opacity:.4;pointer-events:none}
 .xsj-tabs{display:flex;justify-content:space-around;padding:6px 8px 14px;background:rgba(255,255,255,.85);border-top:1px solid #f2e8ee}
