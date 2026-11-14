@@ -1413,6 +1413,17 @@
     setupPhoneResize(root);
     root.addEventListener('click', onClick);
     root.addEventListener('change', onChange);
+    root.addEventListener('focusin', (ev) => {
+      if (!typing()) return;
+      // 键盘弹出后，把正在填的那一栏滚到手机屏幕里看得见的地方
+      setTimeout(() => {
+        const el = ev.target, body = el.closest?.('.xsj-body');
+        if (!body || D.activeElement !== el) return;
+        const off = el.getBoundingClientRect().top - body.getBoundingClientRect().top;
+        if (off < 40 || off > body.clientHeight * 0.45) body.scrollTop += off - body.clientHeight * 0.3;
+      }, 350);
+    });
+    root.addEventListener('focusout', () => setTimeout(() => { if (!typing()) fitPhone(); }, 400));
     root.addEventListener('pointerdown', onPointerDown);
     root.addEventListener('pointermove', onPointerMove);
     root.addEventListener('pointerup', onPointerUp);
@@ -1423,9 +1434,14 @@
   function close() { D.getElementById(ROOT_ID)?.remove(); }
 
   // 按真实窗口大小算手机尺寸，不依赖 dvh、min() 这些较新的 CSS（旧浏览器、QQ/微信内置浏览器也能正常显示）
+  // 正在手机里打字（键盘弹着）：不跟着可视区域变小，不然 iPhone 上手机会被压扁、输入框被挤出画面
+  function typing() {
+    const a = D.activeElement;
+    return !!(a && a.matches?.('input:not([type=checkbox]):not([type=file]), textarea') && D.getElementById(ROOT_ID)?.contains(a));
+  }
   function fitPhone() {
     const phone = D.querySelector(`#${ROOT_ID} .xsj-phone`);
-    if (!phone) return;
+    if (!phone || typing()) return;
     const vv = W.visualViewport;
     const vw = Math.round(vv?.width || W.innerWidth || D.documentElement.clientWidth || 360);
     const vh = Math.round(vv?.height || W.innerHeight || D.documentElement.clientHeight || 640);
@@ -1537,7 +1553,7 @@
   // 窗口变了大小，手机别跑出屏幕
   W.addEventListener('resize', () => {
     const root = D.getElementById(ROOT_ID);
-    if (root && root.style.left) requestAnimationFrame(() => placePhone(root, { x: parseFloat(root.style.left), y: parseFloat(root.style.top) }));
+    if (root && root.style.left && !typing()) requestAnimationFrame(() => placePhone(root, { x: parseFloat(root.style.left), y: parseFloat(root.style.top) }));
   });
 
   // ---------- 漂浮的 📱 ----------
@@ -1727,6 +1743,7 @@
 #xsj-bubble{position:fixed;z-index:29999;width:48px;height:48px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:34px;line-height:1;background:none;filter:drop-shadow(0 2px 4px rgba(0,0,0,.35));cursor:grab;user-select:none;-webkit-user-select:none;touch-action:none;transition:transform .15s}
 #xsj-bubble:hover{transform:scale(1.06)}
 #xsj-bubble.is-drag{cursor:grabbing;transform:scale(1.12);opacity:.85;transition:none}
+@media (pointer:coarse){#${ROOT_ID} :is(input,textarea,select){font-size:16px!important}}
 @media (max-width:600px){#${ROOT_ID}{right:50%;top:50%;transform:translate(50%,-50%)}}
 @supports (aspect-ratio:1/1){.xsj-mapwrap{height:auto}}
 .xsj-drag{position:absolute;left:-10px;bottom:-10px;width:30px;height:30px;border-radius:50%;background:#fff;box-shadow:0 2px 8px rgba(0,0,0,.25);display:flex;align-items:center;justify-content:center;z-index:4;cursor:grab;touch-action:none;user-select:none;-webkit-user-select:none;color:#5a4a5e}
