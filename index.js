@@ -765,6 +765,7 @@
       ${busy}`;
     const wrap = root.querySelector('.xsj-mapwrap');
     if (wrap && keep && isMap) { wrap.scrollLeft = keep[0]; wrap.scrollTop = keep[1]; }
+    if (isMap) fitPhone();
   }
 
   // ---------- 地图（按角色卡存，同一张卡的所有聊天共用） ----------
@@ -1245,9 +1246,28 @@
     root.addEventListener('pointermove', onPointerMove);
     root.addEventListener('pointerup', onPointerUp);
     D.body.appendChild(root);
+    fitPhone();
     render();
   }
   function close() { D.getElementById(ROOT_ID)?.remove(); }
+
+  // 按真实窗口大小算手机尺寸，不依赖 dvh、min() 这些较新的 CSS（旧浏览器、QQ/微信内置浏览器也能正常显示）
+  function fitPhone() {
+    const phone = D.querySelector(`#${ROOT_ID} .xsj-phone`);
+    if (!phone) return;
+    const vv = W.visualViewport;
+    const vw = Math.round(vv?.width || W.innerWidth || D.documentElement.clientWidth || 360);
+    const vh = Math.round(vv?.height || W.innerHeight || D.documentElement.clientHeight || 640);
+    const small = vw <= 600;
+    phone.style.width = Math.max(240, Math.min(340, vw - (small ? 16 : 32))) + 'px';
+    phone.style.height = Math.max(Math.min(360, vh - 16), Math.min(680, vh - (small ? 24 : 90))) + 'px';
+    phone.style.maxWidth = 'none';
+    phone.style.maxHeight = 'none';
+    const wrap = D.querySelector(`#${ROOT_ID} .xsj-mapwrap`);
+    if (wrap && !(W.CSS && CSS.supports && CSS.supports('aspect-ratio', '1/1'))) wrap.style.height = wrap.clientWidth + 'px';
+  }
+  W.addEventListener('resize', fitPhone);
+  W.visualViewport?.addEventListener('resize', fitPhone);
 
   // ---------- 漂浮的 📱 ----------
   const BUBBLE_ID = 'xsj-bubble';
@@ -1302,7 +1322,7 @@
 :where(#${ROOT_ID}) :is(small,em,b,strong,i,h4,label,span,div,p){color:inherit}
 #${ROOT_ID} button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 #${ROOT_ID} input{font:inherit;width:100%;padding:8px 10px;margin:4px 0;border:1px solid #eadfe6;border-radius:10px;background:#fff;color:#3b3340}
-.xsj-phone{position:relative;width:min(340px,calc(100vw - 32px));height:min(680px,calc(100dvh - 90px));background:#1d1a20;border-radius:42px;padding:10px;box-shadow:0 18px 50px rgba(0,0,0,.35)}
+.xsj-phone{position:relative;width:340px;max-width:calc(100vw - 32px);height:680px;max-height:calc(100vh - 90px);max-height:calc(100dvh - 90px);background:#1d1a20;border-radius:42px;padding:10px;box-shadow:0 18px 50px rgba(0,0,0,.35)}
 .xsj-notch{position:absolute;top:16px;left:50%;transform:translateX(-50%);width:84px;height:22px;border-radius:12px;background:#1d1a20;z-index:3}
 .xsj-close{position:absolute!important;top:-10px;right:-10px;width:30px;height:30px;border-radius:50%;background:#fff!important;box-shadow:0 2px 8px rgba(0,0,0,.25);font-size:18px;z-index:4}
 .xsj-screen{position:relative;height:100%;border-radius:34px;overflow:hidden;background:linear-gradient(180deg,#fff7f9 0%,#fbf8ff 100%);display:flex;flex-direction:column}
@@ -1327,7 +1347,7 @@
 .xsj-maptools{display:flex;gap:6px;justify-content:flex-end;margin-bottom:6px}
 .xsj-maptools button{min-width:30px;height:28px;border-radius:9px;background:#fff!important;box-shadow:0 1px 3px rgba(80,40,60,.1);font-size:13px;padding:0 8px!important}
 .xsj-maptools button.on{background:#e86a95!important;color:#fff!important}
-.xsj-mapwrap{width:100%;aspect-ratio:1/1;overflow:auto;border-radius:16px;box-shadow:inset 0 0 0 1px #efe3d6;background:#fbf7f1;touch-action:pan-x pan-y}
+.xsj-mapwrap{width:100%;height:280px;aspect-ratio:1/1;overflow:auto;border-radius:16px;box-shadow:inset 0 0 0 1px #efe3d6;background:#fbf7f1;touch-action:pan-x pan-y}
 .xsj-map{display:block;height:auto;user-select:none;-webkit-user-select:none}
 .xsj-map.is-edit{touch-action:none;cursor:crosshair}
 .xsj-region rect{stroke:#fff;stroke-width:.6;opacity:.95}
@@ -1425,7 +1445,7 @@
 .xsj-tabs{display:flex;justify-content:space-around;padding:6px 8px 14px;background:rgba(255,255,255,.85);border-top:1px solid #f2e8ee}
 .xsj-tabs button{display:flex;flex-direction:column;align-items:center;font-size:10px;opacity:.5;padding:2px 8px}
 .xsj-tabs button span{font-size:18px}.xsj-tabs button.on{opacity:1;color:#e05a8a!important}
-.xsj-busy,.xsj-ask{position:absolute;inset:0;background:rgba(255,247,249,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;font-size:13px;z-index:5}
+.xsj-busy,.xsj-ask{position:absolute;top:0;right:0;bottom:0;left:0;background:rgba(255,247,249,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;font-size:13px;z-index:5}
 .xsj-busy button{opacity:.6;font-size:12px}
 .xsj-spin{width:28px;height:28px;border:3px solid #f5c6d6;border-top-color:#e86a95;border-radius:50%;animation:xsjspin 1s linear infinite}
 @keyframes xsjspin{to{transform:rotate(360deg)}}
@@ -1435,6 +1455,9 @@
 #xsj-bubble:hover{transform:scale(1.06)}
 #xsj-bubble.is-drag{cursor:grabbing;transform:scale(1.12);opacity:.85;transition:none}
 @media (max-width:600px){#${ROOT_ID}{right:50%;top:50%;transform:translate(50%,-50%)}}
+@supports (aspect-ratio:1/1){.xsj-mapwrap{height:auto}}
+/* 矮屏（手机横屏、小窗口）：边框收窄 */
+@media (max-height:560px){.xsj-close{top:4px!important;right:4px!important;width:26px!important;height:26px!important;font-size:16px!important}.xsj-phone{border-radius:28px;padding:6px}.xsj-screen{border-radius:22px!important}.xsj-notch{display:none}.xsj-status{padding-top:8px!important}}
 
 /* ---------- 毛玻璃主题（覆盖上面的白底卡片） ---------- */
 .xsj-screen{background:radial-gradient(120% 70% at 0% 0%,#ffd3e3 0%,transparent 55%),radial-gradient(90% 60% at 100% 22%,#dcd6ff 0%,transparent 60%),radial-gradient(100% 70% at 25% 100%,#cbecfb 0%,transparent 62%),linear-gradient(160deg,#fff3f7,#f2f0ff)!important}
@@ -1503,7 +1526,7 @@
 .xsj-xpic{display:block;width:100%;margin-top:8px;border-radius:12px;max-height:340px;object-fit:cover}
 .xsj-xpost.is-blur .xsj-xpic{filter:blur(18px) brightness(.8)}
 .xsj-xdraw{display:block;margin:4px 6px 0 auto;font-size:11.5px!important;padding:3px 10px!important;border-radius:10px;background:rgba(255,255,255,.55)!important;border:1px solid rgba(255,255,255,.7)!important;color:#5a4a5e!important}
-.xsj-xmask{position:absolute;inset:auto 0 0 0;top:34px;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;color:#fff!important;text-shadow:0 1px 6px rgba(0,0,0,.6)}
+.xsj-xmask{position:absolute;top:34px;right:0;bottom:0;left:0;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;color:#fff!important;text-shadow:0 1px 6px rgba(0,0,0,.6)}
 .xsj-xitem.is-saved .xsj-xpost{box-shadow:0 0 0 1.5px #e86a95,0 4px 18px rgba(0,0,0,.18)}
 .xsj-xnote{font-size:12px;color:#b2456f!important;padding:4px 6px 0;font-style:italic;text-shadow:0 1px 6px rgba(255,255,255,.95)}
 /* 酒馆开了「禁用模糊」时会用 body.no-blur * 把所有模糊去掉；小手机里的毛玻璃单独保留 */
@@ -1530,6 +1553,8 @@
     D.getElementById(BUBBLE_ID)?.remove();
     D.getElementById(STYLE_ID)?.remove();
     if (onResize) W.removeEventListener('resize', onResize);
+    W.removeEventListener('resize', fitPhone);
+    W.visualViewport?.removeEventListener('resize', fitPhone);
   });
 })();
 
