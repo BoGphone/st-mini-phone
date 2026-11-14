@@ -487,6 +487,73 @@
     return `<div class="xsj-drawing ${cls}"><div class="xsj-spin"></div><span data-drawlabel>${esc(d.label)}</span>${cancel ? '<button data-act="cancel-gen">取消</button>' : ''}</div>`;
   }
 
+  // ---------- 📎 引用：把一条帖子/笔记/事件/地点附给下一次回复，不写进聊天记录 ----------
+  // 点了引用 → 输入框上方出现标签；发出的那条消息生成时 AI 能看到；重新生成、滑动也还在；发下一条消息时自动清掉
+  const QUOTE_KEY = 'xsj-phone-quote';
+  let quote = null; // { label, text, bound }
+  const stCtx = () => { try { return W.SillyTavern?.getContext?.() || null; } catch (e) { return null; } };
+  function quoteFor(kind, id) {
+    const who = ownerName();
+    if (kind === 'x') {
+      const it = chat.xlog?.items?.find((x) => x.id === id); if (!it) return null;
+      return {
+        label: `X · ${it.author} 的帖子`,
+        text: [`${who} 私下刷 X 时看到的一条帖子（${who}${(KIND_LINE[it.kind] || '👁 ta 看过').replace(/^\S+\s*ta\s*/, '')}）`, `作者：${it.author} ${it.handle || ''}`.trim(), `正文：${it.text}`,
+          it.media ? `配图/视频：${stripMediaMark(it.media) || it.media}` : '', it.note ? `${who} 当时的想法：${it.note}` : ''].filter(Boolean).join('\n'),
+      };
+    }
+    if (kind === 'note') {
+      const n = notesFor(monthData(view.month)).items.find((x) => x.id === id); if (!n) return null;
+      return {
+        label: `小红书 ·《${n.title}》`,
+        text: [`一篇本地生活平台上的笔记《${n.title}》`, `作者：${n.author}${n.cat ? ` · 分类：${n.cat}` : ''}`, n.text ? `正文：${n.text}` : '', n.tags?.length ? `话题：${n.tags.join('、')}` : '',
+          n.comments?.length ? `热门评论：${n.comments.slice(0, 3).map((c) => `${c.name}：${c.text}`).join('；')}` : ''].filter(Boolean).join('\n'),
+      };
+    }
+    if (kind === 'event') {
+      const e = monthData(view.month).events.find((x) => x.id === id); if (!e) return null;
+      return { label: `事件 ·「${e.title}」`, text: [`最近可能发生的一件事：${e.title}`, e.desc, [e.date, e.who].filter(Boolean).join(' · ')].filter(Boolean).join('\n') };
+    }
+    if (kind === 'place') {
+      const pl = currentMap()?.places.find((x) => x.id === id); if (!pl) return null;
+      return { label: `地点 ·「${pl.name}」`, text: [`地点：${pl.name}（${[pl.type, pl.region].filter(Boolean).join(' · ')}）`, pl.desc, pl.vibe ? `氛围：${pl.vibe}` : '', pl.people ? `常来的人：${pl.people}` : ''].filter(Boolean).join('\n') };
+    }
+    return null;
+  }
+  function applyQuote() {
+    const c = stCtx();
+    try {
+      const value = quote ? `[附带资料] 用户这一轮提到的那条内容如下。把它当作故事里真实存在的东西来理解和回应，不要逐字复述，也不要提到“附带资料”。\n${quote.text}` : '';
+      c?.setExtensionPrompt?.(QUOTE_KEY, value, 1, 1, false, 0); // 1 = 插在聊天里，深度 1（紧挨在最后一条消息前），0 = system
+    } catch (e) { console.warn('[小手机] 附带失败', e); }
+    quoteChip();
+  }
+  function setQuote(q) { quote = q ? { ...q, bound: false } : null; applyQuote(); }
+  function quoteChip() {
+    let chip = D.getElementById('xsj-quote');
+    if (!quote) { chip?.remove(); return; }
+    if (!chip) {
+      const host = D.getElementById('send_form');
+      if (!host) return;
+      chip = D.createElement('div');
+      chip.id = 'xsj-quote';
+      chip.addEventListener('click', (ev) => { if (ev.target.closest('[data-qx]')) { setQuote(null); toast('已撤掉附带', 'info'); } });
+      host.parentNode.insertBefore(chip, host);
+    }
+    chip.innerHTML = `<span>📎 ${quote.bound ? '本楼已附带' : '下一条消息会附带'}：<b>${esc(quote.label)}</b>${quote.bound ? '<small>重新生成也有效，发下一条消息时清除</small>' : ''}</span><button data-qx title="撤掉">×</button>`;
+  }
+  // 发消息：第一次把附带「绑」在这条上；再发下一条时清掉（事件在拼提示词之前触发）
+  (function hookQuoteEvents() {
+    const c = stCtx();
+    if (!c?.eventSource || !c.event_types) return;
+    c.eventSource.on(c.event_types.MESSAGE_SENT, () => {
+      if (!quote) return;
+      if (quote.bound) setQuote(null);
+      else { quote.bound = true; quoteChip(); }
+    });
+    c.eventSource.on(c.event_types.CHAT_CHANGED, () => { if (quote) setQuote(null); });
+  })();
+
   // ---------- 页内确认框（不用 window.confirm） ----------
   function ask(msg, okText = '确定') {
     return new Promise((resolve) => {
@@ -584,7 +651,7 @@
     if (!md.events.length) return `<div class="xsj-empty">还没有${m}月的随机事件<br><button data-act="gen" data-parts="events" class="xsj-primary">🎲 生成随机事件</button></div>`;
     return md.events.map((e) => `
       <div class="xsj-card${e.used ? ' is-used' : ''}">
-        <div class="xsj-card-top"><b>${esc(e.title)}</b><span><button data-act="star" data-id="${e.id}" title="收藏，重新生成时保留">${e.star ? '★' : '☆'}</button><button data-act="used" data-id="${e.id}" title="用过了">${e.used ? '↺' : '✓'}</button></span></div>
+        <div class="xsj-card-top"><b>${esc(e.title)}</b><span><button data-act="star" data-id="${e.id}" title="收藏，重新生成时保留">${e.star ? '★' : '☆'}</button><button data-act="used" data-id="${e.id}" title="用过了">${e.used ? '↺' : '✓'}</button><button data-act="quote" data-kind="event" data-id="${e.id}" title="附带给下一次回复">📎</button></span></div>
         <div>${esc(e.desc)}</div>
         ${e.date || e.who ? `<small>${esc([e.date, e.who].filter(Boolean).join(' · '))}</small>` : ''}
       </div>`).join('') + `<button data-act="gen" data-parts="events" class="xsj-regen">↻ 换一批（保留★）</button>`;
@@ -744,7 +811,7 @@
               <span class="${liked ? 'is-on-like' : ''}" style="${liked ? '--fill:currentColor' : ''}">${XI.like}${big(likes + (liked ? 1 : 0))}</span>
               <span>${XI.views}${big(views)}</span>
               <span class="xsj-xsm${marked ? ' is-on-mark' : ''}" style="${marked ? '--fill:currentColor' : ''}">${XI.mark}</span>
-              <span class="xsj-xsm">${XI.share}</span>
+              <button class="xsj-xquote" data-act="quote" data-kind="x" data-id="${it.id}" title="附带给下一次回复">📎</button>
             </div>
             ${it.note ? `<div class="xsj-xnote2">💭 ${esc(it.note)}</div>` : ''}
           </div>
@@ -800,7 +867,7 @@
       ${view.drawing?.id === n.id ? drawingBox(n.id, 'xsj-drawing-cover xsj-drawing-big') : n.pic
         ? `<img class="xsj-cover xsj-cover-big xsj-cover-img" src="${esc(n.pic)}" alt="">`
         : `<div class="xsj-cover xsj-cover-big" style="background:linear-gradient(160deg,${g1},${g2})"><span>${esc(n.emoji)}</span></div>`}
-      ${view.drawing?.id === n.id ? '' : `<button class="xsj-xdraw" data-act="note-pic">${n.pic ? '↻ 重画封面' : '🖼 生成封面'}</button>`}
+      <div class="xsj-row2 xsj-note-acts">${view.drawing?.id === n.id ? '<span></span>' : `<button class="xsj-xdraw" data-act="note-pic">${n.pic ? '↻ 重画封面' : '🖼 生成封面'}</button>`}<button class="xsj-xdraw" data-act="quote" data-kind="note" data-id="${n.id}">📎 引用到回复</button></div>
       <div class="xsj-note-f xsj-note-author"><i style="background:${g2}">${esc([...n.author][0] || '?')}</i><span>${esc(n.author)}</span><em>${esc(n.cat)}</em></div>
       <h4 class="xsj-note-h">${esc(n.title)}</h4>
       <div class="xsj-note-text">${esc(n.text)}</div>
@@ -1026,7 +1093,7 @@
     return `
       <div class="xsj-place">
         ${photo}
-        <div class="xsj-place-top"><span class="xsj-place-e">${esc(p.emoji)}</span><div><b>${esc(p.name)}</b><small>${esc([p.type, region?.name || p.region].filter(Boolean).join(' · '))}</small></div><button data-act="place-close" class="xsj-x">×</button></div>
+        <div class="xsj-place-top"><span class="xsj-place-e">${esc(p.emoji)}</span><div><b>${esc(p.name)}</b><small>${esc([p.type, region?.name || p.region].filter(Boolean).join(' · '))}</small></div><button data-act="quote" data-kind="place" data-id="${p.id}" class="xsj-x" title="附带给下一次回复">📎</button><button data-act="place-close" class="xsj-x">×</button></div>
         ${p.desc ? `<div>${esc(p.desc)}</div>` : ''}
         ${p.vibe ? `<div class="xsj-place-v">✨ ${esc(p.vibe)}</div>` : ''}
         ${p.people ? `<div class="xsj-place-v">👥 ${esc(p.people)}</div>` : ''}
@@ -1296,6 +1363,13 @@
         }
         toast(batchStop ? `已取消，画好了 ${done} 张` : `画好了 ${done}/${todo.length} 张`, done ? 'success' : 'warning');
         batchStop = false; view.batch = null; render();
+        return;
+      }
+      case 'quote': {
+        const q = quoteFor(t.dataset.kind, t.dataset.id);
+        if (!q) return;
+        setQuote(q);
+        toast(`已附带${q.label}，发消息时 AI 会看到`, 'success');
         return;
       }
       case 'place-pic': {
@@ -1875,6 +1949,9 @@
 .xsj-busy,.xsj-ask{position:absolute;top:0;right:0;bottom:0;left:0;background:rgba(255,247,249,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;font-size:13px;z-index:5}
 .xsj-busy button{opacity:.6;font-size:12px}
 .xsj-drawing{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:150px;margin:4px 0;padding:14px;border-radius:16px;background:rgba(232,106,149,.08);border:1px dashed rgba(232,106,149,.4);font-size:12px;text-align:center;color:inherit}.xsj-drawing button{margin:0;padding:4px 14px;font-size:12px}.xsj-drawing-cover{min-height:130px;border-radius:12px 12px 0 0;margin:0}.xsj-drawing-big{min-height:260px;border-radius:14px}
+#xsj-quote{display:flex;align-items:center;gap:8px;margin:0 6px 4px;padding:5px 6px 5px 12px;border-radius:12px;background:rgba(232,106,149,.16);border:1px solid rgba(232,106,149,.45);font-size:12.5px;line-height:1.4;color:var(--SmartThemeBodyColor,#eee)}#xsj-quote>span{flex:1;min-width:0}#xsj-quote small{display:block;opacity:.6;font-size:11px}#xsj-quote button{flex:none;width:26px;height:26px;border:0;border-radius:50%;background:rgba(255,255,255,.15);color:inherit;font-size:15px;cursor:pointer}
+#${ROOT_ID} .xsj-xquote{margin:0;padding:0 4px;border:0!important;background:none!important;box-shadow:none!important;font-size:14px;opacity:.75;color:#536471}
+.xsj-note-acts{margin:4px 0}
 .xsj-spin{width:28px;height:28px;border:3px solid #f5c6d6;border-top-color:#e86a95;border-radius:50%;animation:xsjspin 1s linear infinite}
 @keyframes xsjspin{to{transform:rotate(360deg)}}
 .xsj-ask-card{background:#fff;border-radius:16px;padding:16px;width:80%;box-shadow:0 6px 20px rgba(0,0,0,.12);line-height:1.6}
