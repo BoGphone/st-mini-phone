@@ -594,35 +594,100 @@
     const who = esc(charKey());
     if (!xl || !xl.items?.length) return `<div class="xsj-empty">还没偷看过 ${who} 的 X<br><button data-act="gen-x" class="xsj-primary">𝕏 看看浏览记录</button><div class="xsj-hint">按最近剧情生成 ${who} 私下刷 X 的记录，偏成人向。内容默认打码，点一下才显示。</div></div>`;
     const reveal = !!view.xReveal;
-    const items = xl.items.map((it, i) => {
-      const shown = reveal || view.xOpen?.[it.id];
-      const blur = it.nsfw && !shown;
-      return `
-      <div class="xsj-xitem${it.saved ? ' is-saved' : ''}">
-        <div class="xsj-xmeta"><span class="xsj-xkind">${X_KINDS[it.kind] || '👁'} ${esc(it.kind)}</span><span>${esc(it.time)}</span></div>
-        <div class="xsj-xpost${blur ? ' is-blur' : ''}" ${it.nsfw ? `data-xopen="${it.id}"` : ''}>
-          <div class="xsj-xauthor"><i>${esc([...(it.author || '?')][0])}</i><b>${esc(it.author)}</b><span>${esc(it.handle)}</span></div>
-          <div class="xsj-xtext">${esc(it.text)}</div>
-          ${it.pic ? `<img class="xsj-xpic" src="${esc(it.pic)}" alt="" loading="lazy">` : it.media ? `<div class="xsj-xmedia">${esc(it.media)}</div>` : ''}
-          ${blur ? '<div class="xsj-xmask">🔞 轻点查看</div>' : ''}
-        </div>
-        ${(it.media || it.img) && !it.pic ? `<button class="xsj-xdraw" data-act="x-pic" data-id="${it.id}">🖼 出图</button>` : ''}
-        ${it.pic ? `<button class="xsj-xdraw" data-act="x-pic" data-id="${it.id}">↻ 重画</button>` : ''}
-        ${it.note ? `<div class="xsj-xnote">“${esc(it.note)}”</div>` : ''}
-      </div>`;
-    }).join('');
-    return `
-      <div class="xsj-xbar">
-        <span>🕶 无痕模式：关</span>
-        <span class="xsj-xbtns">
-          ${xl.items.some((x) => (x.media || x.img) && !x.pic) ? '<button data-act="x-pic-all" class="xsj-mini">🖼 一键生图</button>' : ''}
-          <button data-act="x-reveal" class="xsj-mini">${reveal ? '全部打码' : '全部显示'}</button>
-        </span>
+    const tab = view.xTab === 'search' ? 'search' : 'feed';
+    const me = [...charKey()][0] || '?';
+    const menu = view.xMenu ? `
+      <div class="xsj-xmenu">
+        ${xl.items.some((x) => (x.media || x.img) && !x.pic) ? '<button data-act="x-pic-all">🖼 一键生图</button>' : ''}
+        <button data-act="x-reveal">${reveal ? '🙈 全部打码' : '👁 全部显示'}</button>
+        <button data-act="gen-x">↻ 刷新浏览记录</button>
+      </div>` : '';
+    const head = `
+      <div class="xsj-xhead">
+        <i class="xsj-xme" style="background:${avatarColor(charKey())}">${esc(me)}</i>
+        <b class="xsj-xlogo">𝕏</b>
+        <button data-act="x-menu" class="xsj-xdots" title="更多">⋯</button>
       </div>
-      ${xl.searches?.length ? `<div class="xsj-sub">最近搜索</div><div class="xsj-xsearch">${xl.searches.map((s) => `<span${reveal ? '' : ' class="is-blur"'}>🔍 ${esc(s)}</span>`).join('')}</div>` : ''}
-      <div class="xsj-sub">浏览记录 · 截至${esc(xl.asOf || '')}</div>
-      ${items}
-      <button data-act="gen-x" class="xsj-regen">↻ 刷新浏览记录</button>`;
+      <div class="xsj-xtabs">
+        <button data-xtab="feed" class="${tab === 'feed' ? 'on' : ''}"><span>浏览</span></button>
+        <button data-xtab="search" class="${tab === 'search' ? 'on' : ''}"><span>搜索 · 收藏</span></button>
+      </div>
+      ${menu}`;
+    if (tab === 'search') {
+      const saved = xl.items.filter((x) => x.saved || x.kind === '收藏');
+      return `<div class="xsj-xapp">${head}
+        <div class="xsj-xsearchbar">${XI.search}<span>搜索</span></div>
+        <div class="xsj-xsec">最近搜索</div>
+        ${(xl.searches || []).map((s) => `<div class="xsj-xsrow">${XI.clock}<span${reveal ? '' : ' class="is-blur"'}>${esc(s)}</span><em>×</em></div>`).join('') || '<div class="xsj-none">没有搜索记录</div>'}
+        <div class="xsj-xsec">收藏 <small>${saved.length}</small></div>
+        ${saved.map((it) => xPost(it, reveal)).join('') || '<div class="xsj-none">还没收藏什么</div>'}
+      </div>`;
+    }
+    return `<div class="xsj-xapp">${head}
+      <div class="xsj-xasof">浏览记录 · 截至${esc(xl.asOf || '')} · 无痕模式：关</div>
+      ${xl.items.map((it) => xPost(it, reveal)).join('')}
+      <button data-act="gen-x" class="xsj-regen">↻ 刷新浏览记录</button>
+    </div>`;
+  }
+
+  // X 的小图标（自己画的简笔线条）
+  const XI = {
+    reply: '<svg viewBox="0 0 24 24"><path d="M4 11.5C4 7.4 7.4 4.5 11.6 4.5h1c4.2 0 7.4 3 7.4 6.9 0 3-1.8 5.4-4.6 6.5L10 20.5v-2.6C6.6 17.6 4 15 4 11.5z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>',
+    repost: '<svg viewBox="0 0 24 24"><path d="M7 17V8.5A2.5 2.5 0 0 1 9.5 6H17M14 3l3 3-3 3M17 7v8.5a2.5 2.5 0 0 1-2.5 2.5H7m3 3-3-3 3-3" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    like: '<svg viewBox="0 0 24 24"><path d="M12 20s-7.5-4.6-8.8-9.4C2.4 7.4 4.4 4.8 7.4 4.8c2 0 3.6 1.2 4.6 2.8 1-1.6 2.6-2.8 4.6-2.8 3 0 5 2.6 4.2 5.8C19.5 15.4 12 20 12 20z" fill="var(--fill,none)" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>',
+    views: '<svg viewBox="0 0 24 24"><path d="M5 20V12M10 20V6M15 20v-9M20 20V9" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+    mark: '<svg viewBox="0 0 24 24"><path d="M6.5 4h11v16.5L12 16.8l-5.5 3.7z" fill="var(--fill,none)" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/></svg>',
+    share: '<svg viewBox="0 0 24 24"><path d="M12 15V4M7.5 8.5 12 4l4.5 4.5M5 14v5h14v-5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    eyeOff: '<svg viewBox="0 0 24 24"><path d="M3 12s3.5-6 9-6 9 6 9 6-3.5 6-9 6-9-6-9-6z" fill="none" stroke="currentColor" stroke-width="1.7"/><circle cx="12" cy="12" r="2.8" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M4 20 20 4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
+    check: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#1d9bf0"/><path d="m7.5 12.3 3 3 6-6.3" fill="none" stroke="#fff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+    search: '<svg viewBox="0 0 24 24"><circle cx="10.5" cy="10.5" r="6" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m15 15 5 5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>',
+    clock: '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 8v4.5l3 1.8" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>',
+  };
+  const AV_COLORS = ['#f4a3b8', '#9db7f5', '#f6c177', '#8fd3b6', '#c4a3f0', '#f59e8b', '#7cc7d9', '#e7a5d6'];
+  const avatarColor = (s) => AV_COLORS[hashN(s) % AV_COLORS.length];
+  const KIND_LINE = { 点赞: '♥ ta 赞过', 收藏: '🔖 ta 收藏了', 看视频: '▶ ta 看过这个视频', 浏览: '👁 ta 看过' };
+
+  // 一条帖子：头像、名字+认证+@账号·时间、正文、图片或成人内容警告卡、互动栏
+  function xPost(it, reveal) {
+    const shown = reveal || view.xOpen?.[it.id];
+    const hide = it.nsfw && !shown;
+    const h = hashN(it.id + it.handle + it.text);
+    const big = (n) => fmtLikes(n).replace('k', 'K').replace('w', '万');
+    const replies = 3 + (h % 180), reposts = 20 + (h % 1900), likes = 120 + (h % 29000), views = likes * (18 + (h % 30));
+    const verified = h % 3 === 0;
+    const liked = it.kind === '点赞';
+    const marked = it.saved || it.kind === '收藏';
+    let media = '';
+    if (hide && (it.pic || it.media)) {
+      media = `<div class="xsj-xwarn">${XI.eyeOff}<b>内容警告：成人内容</b><span>该帖子被标记为包含成人内容。</span><button data-xopen="${it.id}">显示</button></div>`;
+    } else if (it.pic) {
+      media = `<img class="xsj-xpic" src="${esc(it.pic)}" alt="" loading="lazy">`;
+    } else if (it.media) {
+      media = `<div class="xsj-xmedia">${esc(it.media)}</div>`;
+    }
+    const draw = (it.media || it.img) ? `<button class="xsj-xdraw" data-act="x-pic" data-id="${it.id}">${it.pic ? '↻ 重画' : '🖼 出图'}</button>` : '';
+    return `
+      <div class="xsj-xpost2">
+        <div class="xsj-xctx">${esc(KIND_LINE[it.kind] || '👁 ta 看过')}<span>${esc(it.time)}</span></div>
+        <div class="xsj-xrow">
+          <i class="xsj-xav" style="background:${avatarColor(it.author)}">${esc([...(it.author || '?')][0])}</i>
+          <div class="xsj-xmain">
+            <div class="xsj-xname"><b>${esc(it.author)}</b>${verified ? `<span class="xsj-xv">${XI.check}</span>` : ''}<span class="xsj-xh">${esc(it.handle)}</span></div>
+            <div class="xsj-xtext${hide ? ' is-blur' : ''}"${hide ? ` data-xopen="${it.id}"` : ''}>${esc(it.text)}</div>
+            ${media}
+            ${draw}
+            <div class="xsj-xacts">
+              <span>${XI.reply}${big(replies)}</span>
+              <span>${XI.repost}${big(reposts)}</span>
+              <span class="${liked ? 'is-on-like' : ''}" style="${liked ? '--fill:currentColor' : ''}">${XI.like}${big(likes + (liked ? 1 : 0))}</span>
+              <span>${XI.views}${big(views)}</span>
+              <span class="xsj-xsm${marked ? ' is-on-mark' : ''}" style="${marked ? '--fill:currentColor' : ''}">${XI.mark}</span>
+              <span class="xsj-xsm">${XI.share}</span>
+            </div>
+            ${it.note ? `<div class="xsj-xnote2">💭 ${esc(it.note)}</div>` : ''}
+          </div>
+        </div>
+      </div>`;
   }
 
   async function generateX() {
@@ -770,12 +835,12 @@
     const keep = prevScroll ? [prevScroll.scrollLeft, prevScroll.scrollTop] : null;
     root.querySelector('.xsj-screen').innerHTML = `
       ${statusBar()}
-      <div class="xsj-head">
+      ${view.tab === 'x' && chat.xlog?.items?.length ? '' : `<div class="xsj-head">
         ${noNav ? '<span></span>' : '<button data-act="prev">‹</button>'}
         <div><b>${titles[view.tab]}</b><small>${sub}</small></div>
         ${noNav ? '<span></span>' : '<button data-act="next">›</button>'}
-      </div>
-      <div class="xsj-body${isMap ? ' xsj-body-map' : ''}">${body}</div>
+      </div>`}
+      <div class="xsj-body${isMap ? ' xsj-body-map' : ''}${view.tab === 'x' ? ' xsj-body-x' : ''}">${body}</div>
       <nav class="xsj-tabs">${[['cal', '🗓', '日程'], ['map', '🗺', '地图'], ['ev', '🎲', '随机'], ['mon', '📕', '小红书'], ['x', '𝕏', 'X'], ['set', '⚙', '设置']].map(([k, i, t]) => `<button data-tab="${k}" class="${view.tab === k ? 'on' : ''}"><span>${i}</span>${t}</button>`).join('')}</nav>
       ${busy}`;
     const wrap = root.querySelector('.xsj-mapwrap');
@@ -1009,6 +1074,9 @@
     if (t.classList.contains('xsj-close')) return close();
     if (t.dataset.tab) { view.tab = t.dataset.tab; view.editing = null; view.note = null; view.place = null; view.mapEdit = false; return render(); }
     if (t.dataset.place) { if (!view.mapEdit) { view.place = t.dataset.place; render(); } return; }
+    if (t.dataset.xtab) { view.xTab = t.dataset.xtab; view.xMenu = false; render(); D.querySelector(`#${ROOT_ID} .xsj-body`).scrollTop = 0; return; }
+    if (act === 'x-menu') { view.xMenu = !view.xMenu; return render(); }
+    if (['x-reveal', 'gen-x', 'x-pic-all'].includes(act)) view.xMenu = false;
     if (t.dataset.xopen) { view.xOpen = { ...(view.xOpen || {}), [t.dataset.xopen]: !view.xOpen?.[t.dataset.xopen] }; return render(); }
     if (t.dataset.gonote) { view.tab = 'mon'; view.note = t.dataset.gonote; return render(); }
     if (t.dataset.note) { view.note = t.dataset.note; render(); D.querySelector(`#${ROOT_ID} .xsj-body`).scrollTop = 0; return; }
@@ -1682,6 +1750,69 @@
 .xsj-xmask{position:absolute;top:34px;right:0;bottom:0;left:0;display:flex;align-items:center;justify-content:center;font-size:12.5px;font-weight:600;color:#fff!important;text-shadow:0 1px 6px rgba(0,0,0,.6)}
 .xsj-xitem.is-saved .xsj-xpost{box-shadow:0 0 0 1.5px #e86a95,0 4px 18px rgba(0,0,0,.18)}
 .xsj-xnote{font-size:12px;color:#b2456f!important;padding:4px 6px 0;font-style:italic;text-shadow:0 1px 6px rgba(255,255,255,.95)}
+/* ---------- X 页：照 X 的版式 ---------- */
+#${ROOT_ID} .xsj-body-x{padding:0!important}
+#${ROOT_ID} .xsj-xapp{min-height:100%;background:rgba(255,255,255,.94);color:#0f1419;padding-bottom:14px}
+#${ROOT_ID} .xsj-xhead{position:relative;display:flex;align-items:center;justify-content:space-between;padding:6px 14px 4px}
+#${ROOT_ID} .xsj-xme{width:30px;height:30px;border-radius:50%;color:#fff!important;font-style:normal;font-size:13px;font-weight:600;display:flex;align-items:center;justify-content:center}
+#${ROOT_ID} .xsj-xlogo{font-size:24px;font-weight:900;line-height:1}
+#${ROOT_ID} .xsj-xdots{width:30px;height:30px;font-size:20px!important;line-height:1;border-radius:50%}
+#${ROOT_ID} .xsj-xtabs{display:flex;border-bottom:1px solid rgba(15,20,25,.1)}
+#${ROOT_ID} .xsj-xtabs button{flex:1;padding:10px 0 0!important;font-size:14px;color:#536471!important;display:flex;justify-content:center}
+#${ROOT_ID} .xsj-xtabs button span{padding-bottom:9px;border-bottom:4px solid transparent;border-radius:2px}
+#${ROOT_ID} .xsj-xtabs button.on{color:#0f1419!important;font-weight:700}
+#${ROOT_ID} .xsj-xtabs button.on span{border-bottom-color:#1d9bf0}
+#${ROOT_ID} .xsj-xmenu{position:absolute;right:12px;top:44px;z-index:3;background:#fff;border-radius:14px;box-shadow:0 6px 24px rgba(0,0,0,.18);padding:6px 0;min-width:150px}
+#${ROOT_ID} .xsj-xmenu button{display:block;width:100%;text-align:left;padding:9px 16px!important;font-size:13.5px}
+#${ROOT_ID} .xsj-xapp .xsj-xmenu{position:absolute}
+#${ROOT_ID} .xsj-xapp{position:relative}
+#${ROOT_ID} .xsj-xasof{font-size:11.5px;color:#536471;padding:8px 14px;border-bottom:1px solid rgba(15,20,25,.08)}
+#${ROOT_ID} .xsj-xpost2{padding:8px 14px 10px;border-bottom:1px solid rgba(15,20,25,.08)}
+#${ROOT_ID} .xsj-xctx{display:flex;justify-content:space-between;font-size:11.5px;color:#536471;padding-left:46px;margin-bottom:3px}
+#${ROOT_ID} .xsj-xrow{display:flex;gap:8px}
+#${ROOT_ID} .xsj-xav{width:38px;height:38px;flex:none;border-radius:50%;color:#fff!important;font-style:normal;font-size:15px;font-weight:600;display:flex;align-items:center;justify-content:center}
+#${ROOT_ID} .xsj-xmain{flex:1;min-width:0}
+#${ROOT_ID} .xsj-xname{display:flex;align-items:center;gap:3px;font-size:14px;min-width:0;white-space:nowrap}
+#${ROOT_ID} .xsj-xname b{overflow:hidden;text-overflow:ellipsis;flex:0 1 auto}
+#${ROOT_ID} .xsj-xv svg{width:15px;height:15px;display:block}
+#${ROOT_ID} .xsj-xh{color:#536471!important;font-size:13px;overflow:hidden;text-overflow:ellipsis;margin-left:2px}
+#${ROOT_ID} .xsj-xpost2 .xsj-xtext{font-size:14px;line-height:1.45;margin:2px 0 6px;white-space:pre-wrap;word-break:break-word}
+#${ROOT_ID} .xsj-xpost2 .xsj-xtext.is-blur{filter:blur(5px);cursor:pointer;user-select:none}
+#${ROOT_ID} .xsj-xpost2 .xsj-xpic{margin:4px 0;border-radius:16px;border:1px solid rgba(15,20,25,.1);max-height:300px}
+#${ROOT_ID} .xsj-xpost2 .xsj-xmedia{margin:4px 0;border-radius:16px;background:#eff3f4;color:#536471!important;font-size:12.5px;padding:14px 12px;line-height:1.5}
+#${ROOT_ID} .xsj-xwarn{position:relative;margin:4px 0;border-radius:16px;padding:16px 14px 46px;background:linear-gradient(135deg,#6b4a55,#3a2c33 60%,#2b2329);color:#fff!important;display:flex;flex-direction:column;gap:4px}
+#${ROOT_ID} .xsj-xwarn svg{width:26px;height:26px;color:#fff;align-self:center;margin-bottom:8px}
+#${ROOT_ID} .xsj-xwarn b{font-size:14px}
+#${ROOT_ID} .xsj-xwarn span{font-size:12.5px;opacity:.85}
+#${ROOT_ID} .xsj-xwarn button{position:absolute;right:10px;bottom:10px;padding:5px 16px!important;border-radius:20px;background:rgba(0,0,0,.35)!important;color:#fff!important;font-weight:700;font-size:13px}
+#${ROOT_ID} .xsj-xpost2 .xsj-xdraw{margin:2px 0 4px auto}
+#${ROOT_ID} .xsj-xacts{display:flex;justify-content:space-between;align-items:center;color:#536471;font-size:11.5px;margin-top:4px;padding-right:4px}
+#${ROOT_ID} .xsj-xacts span{display:flex;align-items:center;gap:3px;color:#536471!important}
+#${ROOT_ID} .xsj-xacts svg{width:16px;height:16px;display:block;color:#536471}
+#${ROOT_ID} .xsj-xacts .is-on-like,#${ROOT_ID} .xsj-xacts .is-on-like svg{color:#f91880!important}
+#${ROOT_ID} .xsj-xacts .is-on-mark svg{color:#1d9bf0!important}
+#${ROOT_ID} .xsj-xnote2{margin-top:6px;font-size:12px;color:#b2456f!important;font-style:italic}
+#${ROOT_ID} .xsj-xsearchbar{display:flex;align-items:center;gap:8px;margin:10px 14px;padding:9px 14px;border-radius:22px;background:#eff3f4;color:#536471!important;font-size:14px}
+#${ROOT_ID} .xsj-xsearchbar svg,#${ROOT_ID} .xsj-xsrow svg{width:17px;height:17px;flex:none;display:block}
+#${ROOT_ID} .xsj-xsec{font-size:17px;font-weight:800;padding:10px 14px 4px}
+#${ROOT_ID} .xsj-xsec small{font-size:12px;font-weight:400;color:#536471}
+#${ROOT_ID} .xsj-xsrow{display:flex;align-items:center;gap:12px;padding:10px 14px;font-size:14px;color:#0f1419}
+#${ROOT_ID} .xsj-xsrow svg{color:#536471}
+#${ROOT_ID} .xsj-xsrow span{flex:1;min-width:0}
+#${ROOT_ID} .xsj-xsrow span.is-blur{filter:blur(4px)}
+#${ROOT_ID} .xsj-xsrow em{font-style:normal;color:#536471;font-size:16px}
+#${ROOT_ID} .xsj-xapp .xsj-none{padding:6px 14px;text-shadow:none}
+#${ROOT_ID} .xsj-xapp .xsj-regen{text-shadow:none;color:#536471}
+/* 深色 */
+#${ROOT_ID} .tone-dark .xsj-xapp{background:rgba(0,0,0,.9);color:#e7e9ea}
+#${ROOT_ID} .tone-dark :is(.xsj-xtabs,.xsj-xasof,.xsj-xpost2){border-color:rgba(231,233,234,.12)}
+#${ROOT_ID} .tone-dark .xsj-xtabs button.on{color:#e7e9ea!important}
+#${ROOT_ID} .tone-dark :is(.xsj-xh,.xsj-xctx,.xsj-xasof,.xsj-xacts span,.xsj-xtabs button){color:#71767b!important}
+#${ROOT_ID} .tone-dark .xsj-xacts svg{color:#71767b}
+#${ROOT_ID} .tone-dark :is(.xsj-xsearchbar,.xsj-xpost2 .xsj-xmedia){background:#202327}
+#${ROOT_ID} .tone-dark .xsj-xsrow{color:#e7e9ea}
+#${ROOT_ID} .tone-dark .xsj-xmenu{background:#16181c;color:#e7e9ea}
+#${ROOT_ID} .tone-dark .xsj-xnote2{color:#ff9cc0!important}
 /* ---------- 玻璃质感细化：渐变 + 顶边高光 + 柔和阴影，顶部和底栏用渐隐代替硬条 ---------- */
 #${ROOT_ID} :is(.xsj-cal,.xsj-daycard,.xsj-card,.xsj-note,.xsj-form,.xsj-place,.xsj-loc,.xsj-genall,.xsj-cart,.xsj-weather,.xsj-ask-card,.xsj-wpset,.xsj-mapwrap,.xsj-empty){
   background:linear-gradient(150deg,rgba(255,255,255,.6),rgba(255,255,255,.3))!important;
