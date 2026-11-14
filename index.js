@@ -417,6 +417,25 @@
     if (pic) { n.pic = pic; saveChat(); render(); }
     return !!pic;
   }
+  // 地点实景图：默认无人风景，按类型给一点画面方向，描述交给柏宝绘的自然语言
+  const PLACE_TAGS = { 家: 'apartment interior, cozy room, window light', 学校: 'school building, campus, hallway', 公司: 'office building, modern interior', 店铺: 'shop storefront, display window', 餐饮: 'cafe interior, restaurant, warm lighting', 景点: 'scenic view, landmark', 交通: 'train station, platform', 医院: 'hospital building, clean corridor', 机构: 'building exterior, entrance', 其他: 'street scene, city' };
+  async function drawPlacePic(p, label) {
+    const key = charKey();
+    const pic = await drawImage({
+      prompt: `no humans, scenery, ${PLACE_TAGS[p.type] || PLACE_TAGS['其他']}, detailed background, atmospheric lighting, full frame`,
+      nl: [p.name, p.desc, p.vibe].filter(Boolean).join('。'),
+      size: 'landscape',
+    }, label, p.id);
+    if (!pic) return false;
+    // 画的过程中可能换了卡：存回开始画时那张卡的地图
+    const mp = (settings.maps || {})[key];
+    const target = mp?.places.find((x) => x.id === p.id);
+    if (!target) return false;
+    target.pic = pic;
+    settings.maps = { ...(settings.maps || {}), [key]: mp }; saveSettings(settings);
+    render();
+    return true;
+  }
   function cancelGen() {
     batchStop = true;
     try { if (genId) stopGenerationById(genId); } catch (e) {}
@@ -959,7 +978,9 @@
       <g class="xsj-pin${p.id === view.place ? ' is-sel' : ''}${here && p.id === here.id ? ' is-here' : ''}" data-place="${p.id}" transform="translate(${p.x} ${p.y})">
         ${here && p.id === here.id ? '<circle r="6.4" class="xsj-pulse" />' : ''}
         <circle r="4.3" class="xsj-pin-bg" />
-        <text class="xsj-pin-e" y="1.5">${esc(p.emoji || '📍')}</text>
+        ${p.pic && view.drawing?.id !== p.id
+          ? `<image href="${esc(p.pic)}" x="-3.9" y="-3.9" width="7.8" height="7.8" preserveAspectRatio="xMidYMid slice" clip-path="url(#xsj-pinclip)" /><circle r="4.3" class="xsj-pin-ring" />`
+          : `<text class="xsj-pin-e" y="1.5">${esc(view.drawing?.id === p.id ? '⏳' : p.emoji || '📍')}</text>`}
         <text class="xsj-pin-n" y="7.8">${esc(p.name)}</text>
       </g>`).join('');
     const sel = mp.places.find((p) => p.id === view.place);
@@ -972,10 +993,11 @@
       <div class="xsj-maptools">
         <button data-act="zoom-out">－</button><button data-act="zoom-in">＋</button>
         <button data-act="map-edit" class="${view.mapEdit ? 'on' : ''}">${view.mapEdit ? '✓ 完成' : '✏️ 编辑'}</button>
+        ${view.mapEdit ? '' : view.batch ? `<button data-act="cancel-gen">⏹ 停止（${view.batch}）</button>` : mp.places.some((p) => !p.pic) ? '<button data-act="place-pic-all">🖼 一键生图</button>' : ''}
       </div>
       ${view.mapEdit ? '<div class="xsj-hint">拖动图钉换位置；点空白处添加地点；点图钉修改。</div>' : ''}
       <div class="xsj-mapwrap"><svg class="xsj-map${view.mapEdit ? ' is-edit' : ''}" viewBox="0 0 100 100" style="width:${zoom * 100}%">
-        <defs><pattern id="xsj-grid" width="5" height="5" patternUnits="userSpaceOnUse"><path d="M5 0H0V5" fill="none" stroke="#efe6dc" stroke-width=".25"/></pattern></defs>
+        <defs><clipPath id="xsj-pinclip" clipPathUnits="objectBoundingBox"><circle cx=".5" cy=".5" r=".5"/></clipPath><pattern id="xsj-grid" width="5" height="5" patternUnits="userSpaceOnUse"><path d="M5 0H0V5" fill="none" stroke="#efe6dc" stroke-width=".25"/></pattern></defs>
         <rect x="0" y="0" width="100" height="100" fill="#fbf7f1"/><rect x="0" y="0" width="100" height="100" fill="url(#xsj-grid)"/>
         ${regions}${pins}
       </svg></div>
@@ -999,13 +1021,17 @@
     const sch = md.schedule.filter((x) => near(x.place) || key(x.title).includes(p.name));
     const notes = notesFor(md).items.filter((n) => key(n.title).includes(p.name) || key(n.text).includes(p.name));
     const region = mp.regions.find((r) => r.name === p.region);
+    const photo = view.drawing?.id === p.id ? drawingBox(p.id, 'xsj-drawing-place')
+      : p.pic ? `<img class="xsj-place-pic" src="${esc(p.pic)}" alt="">` : '';
     return `
       <div class="xsj-place">
+        ${photo}
         <div class="xsj-place-top"><span class="xsj-place-e">${esc(p.emoji)}</span><div><b>${esc(p.name)}</b><small>${esc([p.type, region?.name || p.region].filter(Boolean).join(' · '))}</small></div><button data-act="place-close" class="xsj-x">×</button></div>
         ${p.desc ? `<div>${esc(p.desc)}</div>` : ''}
         ${p.vibe ? `<div class="xsj-place-v">✨ ${esc(p.vibe)}</div>` : ''}
         ${p.people ? `<div class="xsj-place-v">👥 ${esc(p.people)}</div>` : ''}
         ${region?.desc ? `<div class="xsj-place-v">🗺 ${esc(region.name)}：${esc(region.desc)}</div>` : ''}
+        ${view.drawing?.id === p.id ? '' : `<button class="xsj-xdraw" data-act="place-pic">${p.pic ? '↻ 重画这张' : '🖼 画出这个地方'}</button>`}
         ${sch.length ? `<div class="xsj-sub">${+view.month.split('-')[1]}月在这里的安排</div>${sch.map((x) => `<div class="xsj-place-li">${esc(x.date.slice(5))} ${esc(x.time)} ${esc(x.title)}</div>`).join('')}` : ''}
         ${notes.length ? `<div class="xsj-sub">小红书提到</div>${notes.map((n) => `<button class="xsj-place-li xsj-linknote" data-gonote="${n.id}">${esc(n.emoji)} ${esc(n.title)}</button>`).join('')}` : ''}
       </div>`;
@@ -1056,6 +1082,7 @@
       return {
         id: uid(), name: String(pick(p, 'name', '名称', '地点', '名字')).trim(), emoji: String(pick(p, 'emoji', '图标') || '📍').trim(), type: PLACE_TYPES.includes(type) ? type : '其他', region: String(pick(p, 'region', '区域', '所属区域') || '').trim(),
         _np: !Number.isFinite(num(pick(p, 'x', 'X', '横坐标'))) || !Number.isFinite(num(pick(p, 'y', 'Y', '纵坐标'))),
+        pic: old?.places.find((o) => o.name === String(pick(p, 'name', '名称', '地点', '名字')).trim())?.pic || '',
         x: clamp(pick(p, 'x', 'X', '横坐标'), 4, 96), y: clamp(pick(p, 'y', 'Y', '纵坐标'), 4, 93), desc: String(pick(p, 'desc', '说明', '描述') || '').trim(), vibe: String(pick(p, 'vibe', '氛围') || '').trim(), people: String(pick(p, 'people', '常来的人', '人物') || '').trim(),
       };
     });
@@ -1265,6 +1292,27 @@
           if (batchStop) break;
           view.batch = `${i + 1}/${todo.length}`;
           if (await drawNotePic(n, `一键生图 ${i + 1}/${todo.length}`)) done++;
+          else if (batchStop) break;
+        }
+        toast(batchStop ? `已取消，画好了 ${done} 张` : `画好了 ${done}/${todo.length} 张`, done ? 'success' : 'warning');
+        batchStop = false; view.batch = null; render();
+        return;
+      }
+      case 'place-pic': {
+        const p = currentMap()?.places.find((x) => x.id === view.place);
+        if (p) await drawPlacePic(p, '正在画');
+        return;
+      }
+      case 'place-pic-all': {
+        const todo = (currentMap()?.places || []).filter((x) => !x.pic);
+        if (!todo.length) return;
+        if (!(await ask(`把还没图的 ${todo.length} 个地点一张张画出来？中途可以取消，已经画好的会留着。`, `画 ${todo.length} 张`))) return;
+        batchStop = false;
+        let done = 0;
+        for (const [i, p] of todo.entries()) {
+          if (batchStop) break;
+          view.batch = `${i + 1}/${todo.length}`;
+          if (await drawPlacePic(p, `一键生图 ${i + 1}/${todo.length}`)) done++;
           else if (batchStop) break;
         }
         toast(batchStop ? `已取消，画好了 ${done} 张` : `画好了 ${done}/${todo.length} 张`, done ? 'success' : 'warning');
@@ -1730,6 +1778,8 @@
 .xsj-pin-bg{fill:#fff;stroke:#e9c9d6;stroke-width:.5;filter:drop-shadow(0 .4px .6px rgba(0,0,0,.25))}
 .xsj-pin-e{font-size:4.6px;text-anchor:middle;dominant-baseline:middle}
 .xsj-pin-n{font-size:2.9px;text-anchor:middle;fill:#4a3f4d;font-weight:600;paint-order:stroke;stroke:#fbf7f1;stroke-width:.8px}
+.xsj-pin-ring{fill:none;stroke:#fff;stroke-width:.7}.xsj-pin.is-sel .xsj-pin-ring{stroke:#e86a95;stroke-width:.9}.xsj-pin.is-here .xsj-pin-ring{stroke:#e0445e;stroke-width:1}
+.xsj-place-pic{display:block;width:calc(100% + 24px);margin:-10px -12px 8px;aspect-ratio:3/2;height:auto;object-fit:cover;border-radius:14px 14px 0 0}.xsj-drawing-place{min-height:150px}
 .xsj-pin.is-sel .xsj-pin-bg{stroke:#e86a95;stroke-width:.9}
 .xsj-pin.is-here .xsj-pin-bg{stroke:#e0445e;stroke-width:1}
 .xsj-pulse{fill:#e0445e;opacity:.25;animation:xsjpulse 1.6s ease-out infinite;transform-box:fill-box;transform-origin:center}
