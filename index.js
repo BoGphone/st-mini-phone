@@ -122,7 +122,7 @@
 
   let settings = loadSettings();
   let chat = loadChat();
-  const view = { apiEdit: null, apiDraft: null, apiModels: null, apiDel: false, apiBusy: false, tab: 'cal', month: '', day: '', editing: null, busy: null, note: null, noteCat: '推荐', place: null, mapEdit: false, mapZoom: 1 };
+  const view = { drawing: null, batch: null, apiEdit: null, apiDraft: null, apiModels: null, apiDel: false, apiBusy: false, tab: 'cal', month: '', day: '', editing: null, busy: null, note: null, noteCat: '推荐', place: null, mapEdit: false, mapZoom: 1 };
 
   // ---------- 工具 ----------
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -407,13 +407,13 @@
       prompt: tags || 'full frame, cinematic still, detailed',
       nl: tags ? '' : `${stripMediaMark(it.media)} ${it.text}`.trim(),
       size: video ? 'landscape' : 'portrait',
-    }, label);
+    }, label, it.id);
     if (pic) { it.pic = pic; saveChat(); render(); }
     return !!pic;
   }
   async function drawNotePic(n, label) {
     const tags = cleanTags(n.img);
-    const pic = await drawImage({ prompt: tags || 'no humans, aesthetic photo, soft lighting, detailed, full frame', nl: tags ? '' : `${n.title}。${n.text}`, size: 'portrait' }, label);
+    const pic = await drawImage({ prompt: tags || 'no humans, aesthetic photo, soft lighting, detailed, full frame', nl: tags ? '' : `${n.title}。${n.text}`, size: 'portrait' }, label, n.id);
     if (pic) { n.pic = pic; saveChat(); render(); }
     return !!pic;
   }
@@ -421,33 +421,51 @@
     batchStop = true;
     try { if (genId) stopGenerationById(genId); } catch (e) {}
     try { imgAbort?.abort(); } catch (e) {}
-    genId = null; view.busy = null; render();
+    genId = null; view.busy = null; view.drawing = null; render();
   }
 
   // ---------- 出图：借柏宝绘（NovelAI）的公开接口，Key 和排队限流都由柏宝绘管 ----------
   let imgAbort = null;
   const IMG_PHASE = { queued: '排队中', generating: '正在画', 'queued-remote': '排队中', retrying: '被限流，重试中', saving: '正在保存' };
   // 成功返回图片地址（柏宝绘图库里的文件路径，存不了时退回 dataUrl）；失败或取消返回 ''
-  async function drawImage({ prompt, nl = '', size = 'portrait' }, label) {
+  // inlineId：给某条帖子/笔记出图时，只在它自己的框里转圈，不盖住整个手机
+  async function drawImage({ prompt, nl = '', size = 'portrait' }, label, inlineId = null) {
     if (view.busy) return '';
+    if (view.drawing) { toast('正在出另一张图，等它画完', 'warning'); return ''; }
     const api = W.STBaiBaiImage;
     if (!api || typeof api.generate !== 'function') { toast('需要先启用「柏宝绘」扩展', 'warning'); return ''; }
     const st = api.getBackendStatus?.();
     if (st && !st.configured) { toast(`柏宝绘还没配好：${st.reason}`, 'warning'); return ''; }
     imgAbort = new AbortController();
-    view.busy = label; render();
+    if (inlineId) view.drawing = { id: inlineId, label }; else view.busy = label;
+    render();
+    const progress = (p) => {
+      const text = `${label}（${IMG_PHASE[p.phase] || p.phase}${p.attempt ? ` ${p.attempt}/${p.max}` : ''}）`;
+      if (inlineId) {
+        if (!view.drawing) return;
+        view.drawing.label = text;
+        // 只改那一行字，不重画整页
+        D.getElementById(ROOT_ID)?.querySelectorAll('[data-drawlabel]').forEach((el) => { el.textContent = text; });
+      } else if (view.busy) { view.busy = text; render(); }
+    };
     try {
       const r = await api.generate(
         { prompt: String(prompt || '').trim() || 'scenery', nl: String(nl || '').trim(), size, save: true, character: charKey() },
-        { signal: imgAbort.signal, onProgress: (p) => { if (view.busy) { view.busy = `${label}（${IMG_PHASE[p.phase] || p.phase}${p.attempt ? ` ${p.attempt}/${p.max}` : ''}）`; render(); } } },
+        { signal: imgAbort.signal, onProgress: progress },
       );
       return r.path || r.dataUrl || '';
     } catch (e) {
       if (e?.code !== 'aborted') toast(e?.code === 'rate_limited' ? '被 NovelAI 限流了，稍后再试' : `出图失败：${e?.message || e}`, 'error');
       return '';
     } finally {
-      imgAbort = null; view.busy = null; render();
+      imgAbort = null; view.busy = null; view.drawing = null; render();
     }
+  }
+  // 出图中的占位框：转圈 + 进度 + 取消
+  function drawingBox(id, cls = '', cancel = true) {
+    const d = view.drawing;
+    if (!d || d.id !== id) return '';
+    return `<div class="xsj-drawing ${cls}"><div class="xsj-spin"></div><span data-drawlabel>${esc(d.label)}</span>${cancel ? '<button data-act="cancel-gen">取消</button>' : ''}</div>`;
   }
 
   // ---------- 页内确认框（不用 window.confirm） ----------
@@ -576,7 +594,7 @@
       const [g1, g2] = CAT_GRAD[n.cat] || CAT_GRAD['生活'];
       const h = [96, 124, 150][hashN(n.id + n.title) % 3];
       return `<button class="xsj-note" data-note="${n.id}">
-        ${n.pic
+        ${view.drawing?.id === n.id ? drawingBox(n.id, 'xsj-drawing-cover', false) : n.pic
           ? `<img class="xsj-cover xsj-cover-img" src="${esc(n.pic)}" style="height:${h + 30}px" alt="" loading="lazy">`
           : `<div class="xsj-cover" style="height:${h}px;background:linear-gradient(160deg,${g1},${g2})"><span>${esc(n.emoji)}</span></div>`}
         <div class="xsj-note-t">${esc(n.title)}</div>
@@ -584,7 +602,7 @@
       </button>`;
     }).join('');
     return `
-      <div class="xsj-xbar"><div class="xsj-plat" style="margin:0">🔥 ${esc(nb.platform)}</div>${nb.items.some((n) => !n.pic) ? '<button data-act="note-pic-all" class="xsj-mini">🖼 一键生图</button>' : ''}</div>
+      <div class="xsj-xbar"><div class="xsj-plat" style="margin:0">🔥 ${esc(nb.platform)}</div>${view.batch ? `<button data-act="cancel-gen" class="xsj-mini">⏹ 停止（${view.batch}）</button>` : nb.items.some((n) => !n.pic) ? '<button data-act="note-pic-all" class="xsj-mini">🖼 一键生图</button>' : ''}</div>
       ${season}
       ${nb.items.length ? `<div class="xsj-cats">${cats.map((c) => `<button data-cat="${c}" class="${c === cur ? 'on' : ''}">${c}</button>`).join('')}</div>
       <div class="xsj-flow">${cards}</div>` : `<div class="xsj-none">还没有热帖</div>`}
@@ -621,7 +639,7 @@
     const me = [...charKey()][0] || '?';
     const menu = view.xMenu ? `
       <div class="xsj-xmenu">
-        ${xl.items.some((x) => (x.media || x.img) && !x.pic) ? '<button data-act="x-pic-all">🖼 一键生图</button>' : ''}
+        ${view.batch ? `<button data-act="cancel-gen">⏹ 停止一键生图（${view.batch}）</button>` : xl.items.some((x) => (x.media || x.img) && !x.pic) ? '<button data-act="x-pic-all">🖼 一键生图</button>' : ''}
         <button data-act="x-reveal">${reveal ? '🙈 全部打码' : '👁 全部显示'}</button>
         <button data-act="gen-x">↻ 刷新浏览记录</button>
       </div>` : '';
@@ -681,14 +699,16 @@
     const liked = it.kind === '点赞';
     const marked = it.saved || it.kind === '收藏';
     let media = '';
-    if (hide && (it.pic || it.media)) {
+    if (view.drawing?.id === it.id) {
+      media = drawingBox(it.id);
+    } else if (hide && (it.pic || it.media)) {
       media = `<div class="xsj-xwarn">${XI.eyeOff}<b>内容警告：成人内容</b><span>该帖子被标记为包含成人内容。</span><button data-xopen="${it.id}">显示</button></div>`;
     } else if (it.pic) {
       media = `<img class="xsj-xpic" src="${esc(it.pic)}" alt="" loading="lazy">`;
     } else if (it.media) {
       media = `<div class="xsj-xmedia">${esc(it.media)}</div>`;
     }
-    const draw = (it.media || it.img) ? `<button class="xsj-xdraw" data-act="x-pic" data-id="${it.id}">${it.pic ? '↻ 重画' : '🖼 出图'}</button>` : '';
+    const draw = (it.media || it.img) && view.drawing?.id !== it.id ? `<button class="xsj-xdraw" data-act="x-pic" data-id="${it.id}">${it.pic ? '↻ 重画' : '🖼 出图'}</button>` : '';
     return `
       <div class="xsj-xpost2">
         <div class="xsj-xctx">${esc(KIND_LINE[it.kind] || '👁 ta 看过')}<span>${esc(it.time)}</span></div>
@@ -758,10 +778,10 @@
       : `<button data-act="comments" class="xsj-primary xsj-block">💬 看看评论区</button>`;
     return `
       <button data-act="note-back" class="xsj-back">‹ 返回</button>
-      ${n.pic
+      ${view.drawing?.id === n.id ? drawingBox(n.id, 'xsj-drawing-cover xsj-drawing-big') : n.pic
         ? `<img class="xsj-cover xsj-cover-big xsj-cover-img" src="${esc(n.pic)}" alt="">`
         : `<div class="xsj-cover xsj-cover-big" style="background:linear-gradient(160deg,${g1},${g2})"><span>${esc(n.emoji)}</span></div>`}
-      <button class="xsj-xdraw" data-act="note-pic">${n.pic ? '↻ 重画封面' : '🖼 生成封面'}</button>
+      ${view.drawing?.id === n.id ? '' : `<button class="xsj-xdraw" data-act="note-pic">${n.pic ? '↻ 重画封面' : '🖼 生成封面'}</button>`}
       <div class="xsj-note-f xsj-note-author"><i style="background:${g2}">${esc([...n.author][0] || '?')}</i><span>${esc(n.author)}</span><em>${esc(n.cat)}</em></div>
       <h4 class="xsj-note-h">${esc(n.title)}</h4>
       <div class="xsj-note-text">${esc(n.text)}</div>
@@ -867,6 +887,10 @@
     const sub = isMap ? `${esc(currentMap()?.name || '还没有地图')} · ${esc(charKey())}`
       : view.tab === 'x' ? `${esc(charKey())} 的浏览记录`
       : `${y}年${m}月 · ${esc(ownerName())}`;
+    // 同一页重画时保持滚动位置（保存、切方案、出图进度都会重画，不要跳回最上面）
+    const pageKey = [view.tab, view.month, view.note || '', view.place || '', view.xTab || ''].join('|');
+    const oldBody = root.querySelector('.xsj-body');
+    const bodyTop = oldBody && root.dataset.page === pageKey ? oldBody.scrollTop : 0;
     const prevScroll = root.querySelector('.xsj-mapwrap');
     const keep = prevScroll ? [prevScroll.scrollLeft, prevScroll.scrollTop] : null;
     root.querySelector('.xsj-screen').innerHTML = `
@@ -881,6 +905,8 @@
       ${busy}`;
     const wrap = root.querySelector('.xsj-mapwrap');
     if (wrap && keep && isMap) { wrap.scrollLeft = keep[0]; wrap.scrollTop = keep[1]; }
+    root.dataset.page = pageKey;
+    if (bodyTop) { const nb = root.querySelector('.xsj-body'); if (nb) nb.scrollTop = bodyTop; }
     if (isMap) fitPhone();
   }
 
@@ -1237,11 +1263,12 @@
         let done = 0;
         for (const [i, n] of todo.entries()) {
           if (batchStop) break;
+          view.batch = `${i + 1}/${todo.length}`;
           if (await drawNotePic(n, `一键生图 ${i + 1}/${todo.length}`)) done++;
           else if (batchStop) break;
         }
         toast(batchStop ? `已取消，画好了 ${done} 张` : `画好了 ${done}/${todo.length} 张`, done ? 'success' : 'warning');
-        batchStop = false;
+        batchStop = false; view.batch = null; render();
         return;
       }
       case 'x-pic': {
@@ -1258,11 +1285,12 @@
         let done = 0;
         for (const [i, it] of todo.entries()) {
           if (batchStop) break;
+          view.batch = `${i + 1}/${todo.length}`;
           if (await drawXPic(it, `一键生图 ${i + 1}/${todo.length}`)) done++;
           else if (batchStop) break;
         }
         toast(batchStop ? `已取消，画好了 ${done} 张` : `画好了 ${done}/${todo.length} 张`, done ? 'success' : 'warning');
-        batchStop = false;
+        batchStop = false; view.batch = null; render();
         return;
       }
       case 'wp-clear': settings.wallpaper = ''; settings.wpTone = ''; saveSettings(settings); return render();
@@ -1795,6 +1823,7 @@
 .xsj-tabs button span{font-size:18px}.xsj-tabs button.on{opacity:1;color:#e05a8a!important}
 .xsj-busy,.xsj-ask{position:absolute;top:0;right:0;bottom:0;left:0;background:rgba(255,247,249,.92);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;font-size:13px;z-index:5}
 .xsj-busy button{opacity:.6;font-size:12px}
+.xsj-drawing{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:8px;min-height:150px;margin:4px 0;padding:14px;border-radius:16px;background:rgba(232,106,149,.08);border:1px dashed rgba(232,106,149,.4);font-size:12px;text-align:center;color:inherit}.xsj-drawing button{margin:0;padding:4px 14px;font-size:12px}.xsj-drawing-cover{min-height:130px;border-radius:12px 12px 0 0;margin:0}.xsj-drawing-big{min-height:260px;border-radius:14px}
 .xsj-spin{width:28px;height:28px;border:3px solid #f5c6d6;border-top-color:#e86a95;border-radius:50%;animation:xsjspin 1s linear infinite}
 @keyframes xsjspin{to{transform:rotate(360deg)}}
 .xsj-ask-card{background:#fff;border-radius:16px;padding:16px;width:80%;box-shadow:0 6px 20px rgba(0,0,0,.12);line-height:1.6}
