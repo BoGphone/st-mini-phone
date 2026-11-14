@@ -896,9 +896,9 @@
     root.querySelector('.xsj-screen').innerHTML = `
       ${statusBar()}
       ${view.tab === 'x' && chat.xlog?.items?.length ? '' : `<div class="xsj-head">
-        ${noNav ? '<span></span>' : '<button data-act="prev">‹</button>'}
+        ${noNav ? '<span></span>' : '<button data-act="prev" class="xsj-mnav">‹ 上月</button>'}
         <div><b>${titles[view.tab]}</b><small>${sub}</small></div>
-        ${noNav ? '<span></span>' : '<button data-act="next">›</button>'}
+        ${noNav ? '<span></span>' : '<button data-act="next" class="xsj-mnav">下月 ›</button>'}
       </div>`}
       <div class="xsj-body${isMap ? ' xsj-body-map' : ''}${view.tab === 'x' ? ' xsj-body-x' : ''}">${body}</div>
       <nav class="xsj-tabs">${[['cal', '🗓', '日程'], ['map', '🗺', '地图'], ['ev', '🎲', '随机'], ['mon', '📕', '小红书'], ['x', '𝕏', 'X'], ['set', '⚙', '设置']].map(([k, i, t]) => `<button data-tab="${k}" class="${view.tab === k ? 'on' : ''}"><span>${i}</span>${t}</button>`).join('')}</nav>
@@ -1704,6 +1704,7 @@
 .xsj-head{display:flex;align-items:center;justify-content:space-between;padding:10px 14px 6px}
 .xsj-head>div{text-align:center}.xsj-head b{display:block;font-size:17px}.xsj-head small{font-size:11px;opacity:.55}
 .xsj-head button{width:32px;height:32px;border-radius:50%;font-size:20px;background:#f3e9ef!important}
+#${ROOT_ID} .xsj-head .xsj-mnav{width:auto;height:28px;padding:0 10px;border-radius:999px;font-size:12px;white-space:nowrap;flex:none}.xsj-head>div{flex:1;min-width:0}.xsj-head small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .xsj-body{flex:1;overflow-y:auto;padding:4px 14px 12px}
 .xsj-week,.xsj-grid{display:grid;grid-template-columns:repeat(7,1fr);text-align:center}
 .xsj-week{font-size:11px;opacity:.45;margin-bottom:2px}
