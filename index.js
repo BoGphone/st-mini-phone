@@ -1481,13 +1481,13 @@ ${p.text}${p.replies?.length ? `
       </g>`;
     }).join('');
     const pins = mp.places.map((p) => p.fog ? `
-      <g class="xsj-pin is-fog${p.id === view.place ? ' is-sel' : ''}" data-place="${p.id}" transform="translate(${p.x} ${p.y})">
+      <g class="xsj-pin is-fog${p.id === view.place ? ' is-sel' : ''}" data-place="${p.id}" transform="translate(${p.x} ${p.y}) scale(${(1 / zoom).toFixed(3)})">
         <circle r="5.6" class="xsj-fog-cloud" />
         <circle r="4.3" class="xsj-pin-bg" />
         <text class="xsj-pin-e xsj-fog-q" y="1.5">?</text>
         <text class="xsj-pin-n" y="7.8">？？？</text>
       </g>` : `
-      <g class="xsj-pin${p.id === view.place ? ' is-sel' : ''}${here && p.id === here.id ? ' is-here' : ''}" data-place="${p.id}" transform="translate(${p.x} ${p.y})">
+      <g class="xsj-pin${p.id === view.place ? ' is-sel' : ''}${here && p.id === here.id ? ' is-here' : ''}" data-place="${p.id}" transform="translate(${p.x} ${p.y}) scale(${(1 / zoom).toFixed(3)})">
         ${here && p.id === here.id ? '<circle r="6.4" class="xsj-pulse" />' : ''}
         <circle r="4.3" class="xsj-pin-bg" />
         ${p.pic && view.drawing?.id !== p.id
@@ -1506,7 +1506,7 @@ ${p.text}${p.replies?.length ? `
       ${locLine}
       ${view.mapEdit ? '' : `<div class="xsj-maptools">${view.batch ? `<button data-act="cancel-gen">⏹ 停止生图（${view.batch}）</button>` : '<button data-act="gen-fog">🧭 打听消息</button>'}</div>`}
       ${view.mapEdit ? '<div class="xsj-hint">拖动图钉换位置；点空白处添加地点；点图钉修改。</div>' : ''}
-      <div class="xsj-mapframe${mp.pic ? ' has-bg' : ''}"><div class="xsj-mapwrap"><svg class="xsj-map${view.mapEdit ? ' is-edit' : ''}" viewBox="-3 -3 106 120" style="width:${zoom * 100}%">
+      <div class="xsj-mapframe${mp.pic ? ' has-bg' : ''}"><div class="xsj-mapwrap"><svg class="xsj-map${view.mapEdit ? ' is-edit' : ''}" viewBox="-3 -3 106 120" style="width:${zoom * 100}%;--z:${zoom}">
         <defs><clipPath id="xsj-pinclip" clipPathUnits="objectBoundingBox"><circle cx=".5" cy=".5" r=".5"/></clipPath><pattern id="xsj-grid" width="5" height="5" patternUnits="userSpaceOnUse"><path d="M5 0H0V5" fill="none" stroke="#efe6dc" stroke-width=".25"/></pattern></defs>
         <rect x="-3" y="-3" width="106" height="120" fill="#fbf7f1"/>${mp.pic && view.drawing?.id !== 'map-bg' ? `<image href="${esc(mp.pic)}" x="-3" y="-3" width="106" height="120" preserveAspectRatio="xMidYMid slice" />` : '<rect x="-3" y="-3" width="106" height="120" fill="url(#xsj-grid)"/>'}
         ${view.drawing?.id === 'map-bg' ? '<text x="50" y="50" class="xsj-pin-e">⏳</text>' : ''}
@@ -1582,7 +1582,7 @@ ${p.text}${p.replies?.length ? `
       </g>`;
     }).join('');
     const spots = w.spots.filter((s) => { const l = w.lands.find((x) => x.name === s.land); return !l || l.known; }).map((s) => `
-      <g class="xsj-pin${s.known ? '' : ' is-fog'}${view.wspot === s.id ? ' is-sel' : ''}${here && here.id === s.id ? ' is-here' : ''}" data-wspot="${s.id}" transform="translate(${s.x} ${s.y})">
+      <g class="xsj-pin${s.known ? '' : ' is-fog'}${view.wspot === s.id ? ' is-sel' : ''}${here && here.id === s.id ? ' is-here' : ''}" data-wspot="${s.id}" transform="translate(${s.x} ${s.y}) scale(${(1 / zoom).toFixed(3)})">
         ${here && here.id === s.id ? '<circle r="6.4" class="xsj-pulse" />' : ''}
         ${s.known ? '' : '<circle r="5.2" class="xsj-fog-cloud" />'}
         <circle r="3.8" class="xsj-pin-bg" />
@@ -1595,7 +1595,7 @@ ${p.text}${p.replies?.length ? `
     const selS = w.spots.find((s) => s.id === view.wspot);
     return `${sw}
       <div class="xsj-loc">🌍 <b>${esc(w.name)}</b><small>已探索 ${known}/${all}${here ? ` · 你在 ${esc(here.name)}` : ''}</small></div>
-      <div class="xsj-mapframe${w.pic ? ' has-bg' : ''}"><div class="xsj-mapwrap xsj-worldwrap"><svg class="xsj-map xsj-world" viewBox="-3 -3 106 120" style="width:${zoom * 100}%">
+      <div class="xsj-mapframe${w.pic ? ' has-bg' : ''}"><div class="xsj-mapwrap xsj-worldwrap"><svg class="xsj-map xsj-world" viewBox="-3 -3 106 120" style="width:${zoom * 100}%;--z:${zoom}">
         <defs><radialGradient id="xsj-sea" cx="50%" cy="45%" r="75%"><stop offset="0" stop-color="#cfe6ee"/><stop offset="1" stop-color="#9cc3d3"/></radialGradient></defs>
         <rect x="-3" y="-3" width="106" height="120" fill="url(#xsj-sea)"/>
         ${w.pic && view.drawing?.id !== 'world-bg' ? `<image href="${esc(w.pic)}" x="-3" y="-3" width="106" height="120" preserveAspectRatio="xMidYMid slice" />` : ''}
@@ -2795,7 +2795,14 @@ ${p.text}${p.replies?.length ? `
   // 卡片下面那句话：像梗图表格里的台词，一听就知道是这个人
   const NPC_LINE = 'ta 对{{user}}说过、或者常挂在嘴边的一句话，15字以内，一听就是这个人，可以带点好笑或反差；只写{{user}}真的听过的';
   // 画像 tag 的写法：按这个世界来，普通世界就是普通人，非人类才写种族特征
-  const NPC_IMG = '画这个人半身像的英文 danbooru tag，逗号分隔，8-15 个：先写 1boy 或 1girl，再写年龄感、发型发色、眼睛、体型、符合世界观和身份的衣着；只有非人类才写种族特征（如 wolf ears），普通人不写；不写名字和背景';
+  const NPC_IMG = '画这个人半身像的英文 danbooru tag，逗号分隔，8-15 个：先写 1boy 或 1girl，再写年龄（按真实年纪：二三十岁写 young man / young woman，四五十岁才写 middle-aged，六十以上写 old man / old woman；不要用 mature male、mature female 这类词，NovelAI 会把人画老），再写发型发色、眼睛、体型、符合世界观和身份的衣着；只有非人类才写种族特征（如 wolf ears），普通人不写；不写名字，不写背景和场景（房间、店铺、花园、实验室这些都不要）';
+  // 画像 tag 的保险：mature male 换成 young adult（不然会画成大叔），场景词去掉（证件照是纯白底）
+  function npcPortraitTags(raw) {
+    const scene = /(interior|room|garden|shop|store|office|laboratory|\blab\b(?! coat)|hall|lakeside|workshop|clinic|kitchen|apartment|ship|banquet|\bsky\b|daylight|warm light|street|outdoors|indoors|computer setup|screen|sitting|teacup|fishing rod|holding)/i;
+    return String(raw || '').split(',').map((t) => t.trim()).filter(Boolean)
+      .map((t) => (/^mature (male|man)$/i.test(t) ? 'young adult man, handsome' : /^mature (female|woman)$/i.test(t) ? 'adult woman' : t))
+      .filter((t) => !scene.test(t)).join(', ');
+  }
   const npcByName = (name) => npcData().items.find((p) => p.name === name);
   const npcKnownN = (p) => (p.facts || []).filter((f) => f.known).length;
   function npcSide(name) {
@@ -3062,7 +3069,7 @@ ${p.text}${p.replies?.length ? `
     return { met: metNow, facts };
   }
   async function drawNpcPic(p, label) {
-    const tags = cleanTags(p.img);
+    const tags = cleanTags(npcPortraitTags(p.img));
     // 没有 tag 的人：把卡上跟长相有关的都交给柏宝绘（种族、兽形只有卡上写了才会带上）
     const looks = (p.facts || []).filter((f) => /外貌|长相|样子|种族|兽形|原形|年龄|性别|体型|身材|穿着|打扮|衣着/.test(f.k)).map((f) => `${f.k}：${npcT(f.v)}`);
     const nl = [`${p.name}的证件照式头像：正脸，肩膀以上，纯白背景`, p.role, p.look, ...looks].filter(Boolean).join('。');
@@ -4098,7 +4105,7 @@ ${p.text}${p.replies?.length ? `
 .xsj-world .xsj-wland.is-fog path{stroke-dasharray:1.2 1;stroke:rgba(90,100,110,.5);fill-opacity:.85}
 .xsj-world .xsj-wland.is-sel path{stroke:#e86a95;stroke-width:.8}
 .xsj-world .xsj-wland{cursor:pointer}
-.xsj-wlabel{font-size:3.1px;font-weight:700;text-anchor:middle;fill:#4a3b30;paint-order:stroke;stroke:rgba(255,255,255,.75);stroke-width:.7px}
+.xsj-wlabel{font-size:calc(3.1px / var(--z, 1));font-weight:700;text-anchor:middle;fill:#4a3b30;paint-order:stroke;stroke:rgba(255,255,255,.75);stroke-width:calc(.7px / var(--z, 1))}
 .xsj-wland.is-fog .xsj-wlabel{fill:#6d7780}
 .xsj-mapctl{position:absolute;left:8px;bottom:8px;display:flex;gap:5px;z-index:2}
 #${ROOT_ID} .xsj-mapctl button{min-width:30px;height:28px;padding:0 8px!important;border-radius:9px;font-size:13px;background:rgba(255,255,255,.88)!important;border:1px solid rgba(0,0,0,.06)!important;box-shadow:0 2px 6px rgba(80,40,60,.15)!important;color:#5a4650!important}
@@ -4107,7 +4114,7 @@ ${p.text}${p.replies?.length ? `
 .xsj-map{display:block;height:auto;user-select:none;-webkit-user-select:none}
 .xsj-map.is-edit{touch-action:none;cursor:crosshair}
 .xsj-region rect{stroke:#fff;stroke-width:.6;opacity:.95}
-.xsj-rlabel{font-size:3px;font-weight:700;fill:#8a7a8c;letter-spacing:.1px}
+.xsj-rlabel{font-size:calc(3px / var(--z, 1));font-weight:700;fill:#8a7a8c;letter-spacing:.1px}
 .xsj-region{cursor:pointer}.xsj-map.is-edit .xsj-region{cursor:crosshair}
 .xsj-region .xsj-rimg{opacity:.88}
 .xsj-region .xsj-rframe{fill:none;stroke:rgba(255,255,255,.9);stroke-width:.6}
