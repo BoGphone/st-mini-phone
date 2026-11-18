@@ -2864,6 +2864,7 @@ ${p.text}${p.replies?.length ? `
       <b class="xsj-np-name">${esc(p.name)}</b>
       ${p.role ? `<div class="xsj-np-role">${esc(p.role)}</div>` : ''}
       ${p.look ? `<div class="xsj-np-look">${esc(p.look)}</div>` : ''}
+      <div class="xsj-np-met">${baibaiChar(p.name) ? '🎨 画像用柏宝绘角色库里的外貌' : '画像用人物志里写的外貌（柏宝绘角色库里没有这个人）'}</div>
       ${p.line ? `<div class="xsj-np-quote">“${esc(npcT(p.line))}”</div>` : ''}
       ${facts ? `<div class="xsj-np-facts">${facts}</div>` : `<div class="xsj-np-acts"><button data-act="npc-fill">✦ 补全这张卡</button></div><div class="xsj-hint">刚认识，栏位还没写。点一下补全（调一次 API），或者等下次「从剧情更新」一起补。</div>`}
       ${links ? `<div class="xsj-sub">关系</div><div class="xsj-np-links">${links}</div>` : ''}
@@ -3068,13 +3069,23 @@ ${p.text}${p.replies?.length ? `
     }
     return { met: metNow, facts };
   }
+  // 柏宝绘角色库里同名的角色（外貌 tag 是用户自己整理过的，比 AI 写的准）
+  function baibaiChar(name) {
+    try {
+      const list = W.STBaiBaiImage?.getCharacters?.().characters || [];
+      const n = txt(name);
+      return list.find((c) => c.name === n) || list.find((c) => n.length >= 2 && (c.name.includes(n) || n.includes(c.name))) || null;
+    } catch (e) { return null; }
+  }
   async function drawNpcPic(p, label) {
-    const tags = cleanTags(npcPortraitTags(p.img));
+    // 外貌优先用柏宝绘角色库的描述；没有再用人物志里 AI 写的
+    const bb = baibaiChar(p.name);
+    const tags = bb?.tag ? cleanTags(bb.tag) : cleanTags(npcPortraitTags(p.img));
     // 没有 tag 的人：把卡上跟长相有关的都交给柏宝绘（种族、兽形只有卡上写了才会带上）
     const looks = (p.facts || []).filter((f) => /外貌|长相|样子|种族|兽形|原形|年龄|性别|体型|身材|穿着|打扮|衣着/.test(f.k)).map((f) => `${f.k}：${npcT(f.v)}`);
-    const nl = [`${p.name}的证件照式头像：正脸，肩膀以上，纯白背景`, p.role, p.look, ...looks].filter(Boolean).join('。');
-    // 证件照构图：正脸、肩膀以上、纯白底
-    const pic = await drawImage({ prompt: `solo, portrait, head and shoulders, front view, facing viewer, looking at viewer, ${tags ? tags + ', ' : ''}simple background, white background, even lighting`, nl: tags ? '' : nl, size: 'portrait' }, label, p.id);
+    const nl = bb?.tag ? (bb.nl || '') : [`${p.name}的证件照式头像：正脸，肩膀以上，纯白背景`, p.role, p.look, ...looks].filter(Boolean).join('。');
+    // 固定的证件照构图：正脸、肩膀以上、纯白底
+    const pic = await drawImage({ prompt: `solo, portrait, head and shoulders, front view, facing viewer, looking at viewer, ${tags ? tags + ', ' : ''}simple background, white background, even lighting`, nl: tags && !bb?.tag ? '' : nl, size: 'portrait' }, label, p.id);
     if (!pic) return false;
     p.pic = pic; delete p.picRaw;
     saveChat(); render();
