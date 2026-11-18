@@ -496,7 +496,7 @@
   const IMG_PHASE = { queued: '排队中', generating: '正在画', 'queued-remote': '排队中', retrying: '被限流，重试中', saving: '正在保存' };
   // 成功返回图片地址（柏宝绘图库里的文件路径，存不了时退回 dataUrl）；失败或取消返回 ''
   // inlineId：给某条帖子/笔记出图时，只在它自己的框里转圈，不盖住整个手机
-  async function drawImage({ prompt, nl = '', size = 'portrait' }, label, inlineId = null) {
+  async function drawImage({ prompt, nl = '', size = 'portrait', negative = '' }, label, inlineId = null) {
     if (view.busy) return '';
     if (view.drawing) { toast('正在出另一张图，等它画完', 'warning'); return ''; }
     const api = W.STBaiBaiImage;
@@ -517,7 +517,7 @@
     };
     try {
       const r = await api.generate(
-        { prompt: String(prompt || '').trim() || 'scenery', nl: String(nl || '').trim(), size, save: true, character: charKey() },
+        { prompt: String(prompt || '').trim() || 'scenery', nl: String(nl || '').trim(), ...(negative ? { negative: String(negative).trim() } : {}), size, save: true, character: charKey() },
         { signal: imgAbort.signal, onProgress: progress },
       );
       return r.path || r.dataUrl || '';
@@ -2303,11 +2303,18 @@ ${p.text}${p.replies?.length ? `
     saveChat();
     render();
   }
+  // 图鉴图：一定写 no humans；生物写 animal focus，其余（植物、食材、器物、矿石……）写成静物，并在负面里排除猫、动物和人
+  // （以前用的 solo focus 会让 NovelAI 自己塞一个角色进来，最常见的就是猫）
+  const DEX_CREATURE = /兽|禽|鸟|鱼|虫|蛇|龙|妖|魔|怪|生物|动物|宠|精灵/;
   async function drawDexPic(x, label) {
     const tags = cleanTags(x.img);
+    const creature = DEX_CREATURE.test(x.cat || '');
+    const plant = /植物|花|草|树|菌|药/.test(x.cat || '');
+    const focus = creature ? 'no humans, animal focus' : plant ? 'no humans, still life, plant focus, botanical' : 'no humans, still life, object focus';
     const pic = await drawImage({
-      prompt: `${tags || 'no humans'}, solo focus, detailed background, atmospheric lighting, full frame`,
+      prompt: `${focus}, ${tags ? tags + ', ' : ''}detailed, atmospheric lighting, full frame`,
       nl: tags ? '' : [x.name, x.desc].filter(Boolean).join('。'),
+      negative: creature ? '1girl, 1boy, human' : 'cat, animal, 1girl, 1boy, human, character',
       size: 'portrait',
     }, label, x.id);
     if (pic) { x.pic = pic; saveChat(); render(); }
