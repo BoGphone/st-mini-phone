@@ -1547,7 +1547,7 @@ ${p.text}${p.replies?.length ? `
     const profs = settings.apiProfiles, act = settings.apiActive;
     const ed = view.apiEdit != null && profs[view.apiEdit] ? { ...profs[view.apiEdit], ...(view.apiDraft || {}) } : null;
     const chips = (attr, cur, list) => `<div class="xsj-seg">${list.map(([v, t]) => `<button data-${attr}="${v}" class="${cur === v ? 'on' : ''}">${t}</button>`).join('')}</div>`;
-    return `
+    return `${updCard()}
       <div class="xsj-card xsj-set">
         <div class="xsj-set-h">🖼 外观</div>
         <div class="xsj-set-row"><span>玻璃颜色</span>${chips('glass', settings.glass || 'auto', [['auto', '自动'], ['light', '浅色'], ['dark', '深色']])}</div>
@@ -2346,7 +2346,7 @@ ${p.text}${p.replies?.length ? `
     return (APPS.find((a) => a.k === k) || {}).t || k;
   }
   function appIcon(a) {
-    const fresh = a.k === 'dex' || a.k === 'npc' ? codex()[a.k].items.filter((x) => x.isNew).length : 0;
+    const fresh = a.k === 'set' ? (updNew() ? '新' : 0) : a.k === 'dex' || a.k === 'npc' ? codex()[a.k].items.filter((x) => x.isNew).length : 0;
     return `<button class="xsj-app" data-tab="${a.k}"><i><img src="${ICON_URI[a.k]}" alt="" draggable="false" decoding="sync"></i>${fresh ? `<b class="xsj-badge">${fresh}</b>` : ''}<span>${esc(appTitle(a.k))}</span></button>`;
   }
   // 桌面日历小组件：左边今天，右边整月；点一下进日程的今天
@@ -3718,6 +3718,103 @@ ${p.text}${p.replies?.length ? `
       return list.find((c) => c.name === n) || list.find((c) => n.length >= 2 && (c.name.includes(n) || n.includes(c.name))) || null;
     } catch (e) { return null; }
   }
+
+  // ---------- 🔔 更新提示（只在公开版里） ----------
+  const XSJ_VERSION = '3.1.0', XSJ_NOTES = ["设置里可以检查更新、看更新内容、一键更新"];
+  // 从 GitHub 装的文件夹名不一定叫什么，从脚本自己的地址里认
+  const XSJ_DIR = (() => { try { return decodeURIComponent((/third-party\/([^/]+)\/index\.js/.exec(new Error().stack || '') || [])[1] || ''); } catch (e) { return ''; } })();
+  const UPD_URLS = ['https://raw.githubusercontent.com/BoGphone/st-mini-phone/main/update.json', 'https://cdn.jsdelivr.net/gh/BoGphone/st-mini-phone@main/update.json'];
+  const verNums = (v) => String(v || '').split('.').map((x) => parseInt(x, 10) || 0);
+  const verNewer = (a, b) => { const x = verNums(a), y = verNums(b); for (let i = 0; i < 3; i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) > (y[i] || 0); return false; };
+  // 换了版本，以前查到的结果就不算了
+  const updState = () => (settings.upd && settings.upd.from === XSJ_VERSION ? settings.upd : {});
+  const updNew = () => !!updState().newer;
+  let updBusy = '';
+  const updSave = (p) => { settings.upd = { ...updState(), from: XSJ_VERSION, ...p }; saveSettings(settings); };
+  async function updPost(path, body, ms) {
+    return fetch(`/api/extensions/${path}`, { method: 'POST', headers: SillyTavern.getContext().getRequestHeaders(), body: JSON.stringify(body), signal: AbortSignal.timeout(ms) });
+  }
+  // 先问酒馆：和装的时候同一个来源，装得上就查得到。不是从 GitHub 装的返回 null
+  async function updGit() {
+    if (!XSJ_DIR) return null;
+    for (const global of [false, true]) {
+      try {
+        const r = await updPost('version', { extensionName: XSJ_DIR, global }, 25000);
+        if (r.status === 404) continue;
+        if (!r.ok) return null;
+        const d = await r.json();
+        return d.remoteUrl ? { global, newer: d.isUpToDate === false } : null;
+      } catch (e) { return null; }
+    }
+    return null;
+  }
+  // 新版本号和更新内容
+  async function updInfo() {
+    for (const u of UPD_URLS) {
+      try {
+        const r = await fetch(`${u}?t=${Math.floor(Date.now() / 600000)}`, { signal: AbortSignal.timeout(7000), credentials: 'omit', referrerPolicy: 'no-referrer' });
+        if (!r.ok) continue;
+        const d = await r.json();
+        if (/^\d+(\.\d+){1,2}$/.test(String(d?.version))) return { version: String(d.version), notes: (Array.isArray(d.notes) ? d.notes : []).map((x) => txt(x).slice(0, 120)).filter(Boolean).slice(0, 12) };
+      } catch (e) { /* 换下一个地址 */ }
+    }
+    return null;
+  }
+  async function updCheck(byHand) {
+    if (updBusy) return;
+    updBusy = '正在检查…';
+    if (byHand) render();
+    const [git, info] = await Promise.all([updGit(), updInfo()]);
+    updBusy = '';
+    if (!git && !info) {
+      if (byHand) { toast('没连上，过一会儿再试', 'warning'); render(); }
+      return;
+    }
+    const newer = git ? git.newer : verNewer(info.version, XSJ_VERSION);
+    const version = newer && info && verNewer(info.version, XSJ_VERSION) ? info.version : '';
+    const told = updState().told;
+    updSave({ at: Date.now(), newer, version, notes: version ? info.notes : [], git: git ? { global: git.global } : null });
+    if (newer && told !== (version || 'new')) { updSave({ told: version || 'new' }); if (!byHand) toast(`小手机有新版${version ? ' ' + version : ''}，在小手机的「设置」里更新`); }
+    if (byHand && !newer) toast('已经是最新版', 'success');
+    if (D.getElementById(ROOT_ID) && ['home', 'set'].includes(view.tab) && !view.arrange && (byHand || (view.apiEdit == null && !D.querySelector(`#${ROOT_ID} :is(input,textarea):focus, #${ROOT_ID} .xsj-ask`)))) render();
+  }
+  // 打开手机时自动查，六小时最多一次
+  function updAuto() { if (!settings.updOff && Date.now() - (updState().at || 0) > 6 * 3600e3) updCheck(false); }
+  async function updRun() {
+    const g = updState().git;
+    const manual = '酒馆 → 扩展 → 管理扩展 → 找到「小手机」点更新';
+    if (!g || !XSJ_DIR) { toast(`这里更新不了，请手动更新：${manual}`, 'warning'); return; }
+    if (!(await ask('现在更新小手机？聊天和小手机里的内容都会保留，更新完要刷新页面。', '更新'))) return;
+    updBusy = '正在更新…'; render();
+    let ok = false, why = '';
+    try {
+      const r = await updPost('update', { extensionName: XSJ_DIR, global: g.global }, 90000);
+      ok = r.ok;
+      if (r.status === 403) why = '这个扩展装给了所有用户，要管理员来更新';
+    } catch (e) { why = '太久没反应'; }
+    updBusy = '';
+    if (!ok) { toast(`没更新成功${why ? '：' + why : ''}。可以手动更新：${manual}`, 'error'); return render(); }
+    updSave({ newer: false, version: '', notes: [] });
+    render();
+    if (await ask('更新好了。现在刷新页面？没发出去的字会丢。', '刷新')) W.location.reload();
+  }
+  function updCard() {
+    const u = updState(), list = (a) => `<ul class="xsj-upd-l">${a.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>`;
+    return `<div class="xsj-card xsj-set">
+        <div class="xsj-set-h">🔔 更新 <small>现在是 ${esc(XSJ_VERSION)}</small></div>
+        <small class="xsj-set-tip">${updBusy ? esc(updBusy) : u.newer ? `<b class="xsj-upd-n">有新版${u.version ? ' ' + esc(u.version) : ''}</b>` : u.at ? '已经是最新版' : '还没检查过'}</small>
+        ${u.newer && u.notes?.length ? list(u.notes) : ''}
+        <div class="xsj-set-row"><button data-act="upd-check" class="xsj-regen"${updBusy ? ' disabled' : ''}>检查更新</button>${u.newer ? `<button data-act="upd-run" class="xsj-primary"${updBusy ? ' disabled' : ''}>现在更新</button>` : ''}</div>
+        <div class="xsj-set-row"><span>打开手机时自动检查</span><div class="xsj-seg"><button data-act="upd-auto-on" class="${settings.updOff ? '' : 'on'}">开</button><button data-act="upd-auto-off" class="${settings.updOff ? 'on' : ''}">关</button></div></div>
+        <small class="xsj-set-tip">只向 GitHub（连不上时用 jsDelivr）查有没有新版，不发送你的任何内容。</small>
+        ${XSJ_NOTES.length ? `<details class="xsj-raw"><summary>这一版改了什么</summary>${list(XSJ_NOTES)}</details>` : ''}
+      </div>`;
+  }
+  function updClick(act) {
+    if (act === 'upd-check') return updCheck(true);
+    if (act === 'upd-run') return updBusy ? undefined : updRun();
+    if (act === 'upd-auto-on' || act === 'upd-auto-off') { settings.updOff = act === 'upd-auto-off'; saveSettings(settings); return render(); }
+  }
   // ---------- 桌面图标：磨砂果冻（由 icon-preview/install.mjs 生成，不手改） ----------
   const ICON_FILTER = "<filter id=\"jelly\" filterUnits=\"userSpaceOnUse\" x=\"-25\" y=\"-25\" width=\"150\" height=\"160\" color-interpolation-filters=\"sRGB\"><feGaussianBlur in=\"SourceGraphic\" stdDeviation=\"4.6\" result=\"b1\"/><feOffset in=\"b1\" dx=\"2\" dy=\"6.5\" result=\"o1\"/><feColorMatrix in=\"o1\" type=\"matrix\" values=\".82 0 0 0 0 0 .82 0 0 0 0 0 .86 0 0 0 0 0 .5 0\" result=\"sh1\"/><feGaussianBlur in=\"SourceAlpha\" stdDeviation=\"1.3\"/><feOffset dx=\".8\" dy=\"1.8\"/><feColorMatrix type=\"matrix\" values=\"0 0 0 0 .3 0 0 0 0 .34 0 0 0 0 .5 0 0 0 .16 0\" result=\"sh2\"/><feMerge result=\"s0\"><feMergeNode in=\"sh1\"/><feMergeNode in=\"sh2\"/></feMerge><feComposite in=\"s0\" in2=\"SourceAlpha\" operator=\"out\" result=\"shadow\"/><feComponentTransfer in=\"SourceAlpha\" result=\"solid\"><feFuncA type=\"linear\" slope=\"1.5\"/></feComponentTransfer><feGaussianBlur in=\"solid\" stdDeviation=\".95\"/><feComponentTransfer result=\"e1\"><feFuncA type=\"linear\" slope=\"4\" intercept=\"-2.9\"/></feComponentTransfer><feComposite in=\"solid\" in2=\"e1\" operator=\"out\" result=\"edge\"/><feFlood flood-color=\"#fff\" flood-opacity=\".8\"/><feComposite in2=\"edge\" operator=\"in\"/><feGaussianBlur stdDeviation=\".25\" result=\"rim\"/><feGaussianBlur in=\"e1\" stdDeviation=\"3.6\" result=\"eb\"/><feComposite in=\"e1\" in2=\"eb\" operator=\"arithmetic\" k2=\"1\" k3=\"-1\" result=\"band\"/><feColorMatrix in=\"SourceGraphic\" type=\"saturate\" values=\"1.5\" result=\"sat\"/><feColorMatrix in=\"sat\" type=\"matrix\" values=\".84 0 0 0 0 0 .84 0 0 0 0 0 .88 0 0 0 0 0 1 0\" result=\"dk\"/><feComposite in=\"dk\" in2=\"band\" operator=\"in\" result=\"deep\"/><feGaussianBlur in=\"solid\" stdDeviation=\"4.2\" result=\"bb\"/><feSpecularLighting in=\"bb\" surfaceScale=\"4\" specularConstant=\".62\" specularExponent=\"13\" lighting-color=\"#fff\" result=\"sp\"><feDistantLight azimuth=\"238\" elevation=\"52\"/></feSpecularLighting><feComposite in=\"sp\" in2=\"e1\" operator=\"in\" result=\"spec\"/><feOffset in=\"e1\" dx=\"-1.4\" dy=\"-2\" result=\"up\"/><feComposite in=\"e1\" in2=\"up\" operator=\"out\"/><feGaussianBlur stdDeviation=\".7\"/><feColorMatrix type=\"matrix\" values=\"0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .75 0\"/><feComposite in2=\"e1\" operator=\"in\" result=\"bot\"/><feMerge><feMergeNode in=\"shadow\"/><feMergeNode in=\"SourceGraphic\"/><feMergeNode in=\"deep\"/><feMergeNode in=\"spec\"/><feMergeNode in=\"bot\"/><feMergeNode in=\"rim\"/></feMerge></filter><filter id=\"emb\" filterUnits=\"userSpaceOnUse\" x=\"-10\" y=\"-10\" width=\"120\" height=\"125\" color-interpolation-filters=\"sRGB\"><feGaussianBlur in=\"SourceAlpha\" stdDeviation=\"1\"/><feOffset dx=\".5\" dy=\"1.3\"/><feColorMatrix type=\"matrix\" values=\"0 0 0 0 .25 0 0 0 0 .25 0 0 0 0 .4 0 0 0 .22 0\"/><feComposite in2=\"SourceAlpha\" operator=\"out\" result=\"s\"/><feMerge><feMergeNode in=\"s\"/><feMergeNode in=\"SourceGraphic\"/></feMerge></filter>";
   const ICON_ART = {
@@ -3759,6 +3856,7 @@ ${p.text}${p.replies?.length ? `
     const act = t.dataset.act;
     if (t.classList.contains('xsj-close')) return close();
     if (act === 'back') return goBack();
+    if (act?.startsWith('upd-')) return updClick(act);
     // 生成前问：只新增，还是全部重新生成；全部重来但没生成出东西时，把原来的还回去
     if (act === 'gen-dex' && !view.busy && !chat.dexEra) {
       const v = await askChoice('这个故事是什么时代背景？选一次就记住，设置里能改', Object.entries(DEX_ERAS).map(([k, [n]]) => ({ v: k, label: k === 'auto' ? '自动（看世界书和剧情）' : n, primary: k === 'auto' })));
@@ -4548,6 +4646,7 @@ ${p.text}${p.replies?.length ? `
     const sd = storyDate();
     view.month = ym(sd.y, sd.m); view.day = dateKey(sd); view.editing = null; view.note = null;
     view.tab = 'home'; view.dex = null; view.wiki = null; view.arrange = false;
+    setTimeout(updAuto, 1500);
     const root = D.createElement('div');
     root.id = ROOT_ID;
     root.innerHTML = `<div class="xsj-phone"><div class="xsj-notch"></div><button class="xsj-close" title="关闭">×</button><div class="xsj-resize" title="拖动调整大小（双击恢复默认大小）"><svg width="14" height="14" viewBox="0 0 14 14"><path d="M1 1h5L4.3 2.7l7 7L13 8v5H8l1.7-1.7-7-7L1 6z"/></svg></div><div class="xsj-drag" title="拖动小手机（双击回到默认位置）"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M8 1 5.6 3.4h1.6V7.2H3.4V5.6L1 8l2.4 2.4V8.8h3.8v3.8H5.6L8 15l2.4-2.4H8.8V8.8h3.8v1.6L15 8l-2.4-2.4v1.6H8.8V3.4h1.6z"/></svg></div><div class="xsj-screen"></div></div>`;
@@ -5280,7 +5379,7 @@ ${p.text}${p.replies?.length ? `
 #${ROOT_ID} :is(.xsj-blank.is-x .xsj-primary){background:radial-gradient(34% 20% at 24% 17%,rgba(255,255,255,.55),rgba(255,255,255,0) 100%),linear-gradient(180deg,#5b5b60,#2f2f33 55%,#6a6a70)!important;color:#fff!important;border:0!important;box-shadow:1px 4px 9px -1px rgba(0,0,0,.35)!important}
 #${ROOT_ID} .xsj-phone .xsj-screen .xsj-genmonth{display:block;width:100%;margin:12px 0 4px!important;padding:12px!important;border-radius:999px!important;font-size:14px;font-weight:600;background:radial-gradient(34% 20% at 24% 17%,rgba(255,255,255,.78),rgba(255,255,255,0) 100%),linear-gradient(180deg,#f9a5c0,#f0749b 55%,#fcc9d9)!important;color:#fff!important;border:0!important;box-shadow:1px 4px 9px -1px rgba(242,120,160,.5),inset 0 -.8px 1px rgba(255,255,255,.6)!important;text-shadow:0 1px 2px rgba(200,60,110,.35)}
 #${ROOT_ID} .has-wp:not(.app-white) .xsj-blank{border-radius:22px;background:rgba(255,255,255,.72);-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px)}#${ROOT_ID} .has-wp.tone-dark:not(.app-white) .xsj-blank{background:rgba(20,18,24,.5)}
-#${ROOT_ID} .xsj-held{opacity:.55!important}@media (pointer:coarse){#${ROOT_ID} :is([data-hold],[data-item],[data-note],[data-dex],[data-wiki],[data-npc],[data-dreamopen],[data-act="closet-open"],[data-act="pic-open"]),#${ROOT_ID} :is([data-hold],[data-note],[data-dex],[data-dreamopen],[data-act="closet-open"],[data-act="pic-open"]) *{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}}
+.xsj-upd-l{margin:6px 0;padding-left:18px;font-size:12.5px;line-height:1.7;list-style:disc}.xsj-upd-n{color:#e86a95}#${ROOT_ID} .xsj-held{opacity:.55!important}@media (pointer:coarse){#${ROOT_ID} :is([data-hold],[data-item],[data-note],[data-dex],[data-wiki],[data-npc],[data-dreamopen],[data-act="closet-open"],[data-act="pic-open"]),#${ROOT_ID} :is([data-hold],[data-note],[data-dex],[data-dreamopen],[data-act="closet-open"],[data-act="pic-open"]) *{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}}
 #${ROOT_ID} .xsj-formask{justify-content:flex-start;padding-top:96px;overflow-y:auto}#${ROOT_ID} .xsj-formask .xsj-ask-card{width:88%;flex:none}.xsj-formask .t{font-size:15px;font-weight:600;margin:0 2px 8px}#${ROOT_ID} .xsj-phone .xsj-screen.xsj-screen .xsj-formask .xsj-form.xsj-form{margin:0;padding:0!important;background:none!important;border:0!important;box-shadow:none!important;-webkit-backdrop-filter:none!important;backdrop-filter:none!important}#${ROOT_ID} .xsj-phone .xsj-screen .xsj-formask .xsj-primary{background:radial-gradient(34% 20% at 24% 17%,rgba(255,255,255,.78),rgba(255,255,255,0) 100%),linear-gradient(180deg,#f9a5c0,#f0749b 55%,#fcc9d9)!important;color:#fff!important;border:0!important;box-shadow:1px 4px 9px -1px rgba(242,120,160,.5)!important}#${ROOT_ID} .xsj-phone .xsj-closet-ask>*{flex:none}#${ROOT_ID} .xsj-phone .xsj-screen:not(.app-dex):not(.app-closet) .xsj-regen-card .xsj-cchips button[data-k="count"]:not(.xsj-primary){background:rgba(128,120,125,.12)!important;border:0!important;color:inherit!important}#${ROOT_ID} .xsj-phone .app-dex .xsj-numin{background:rgba(243,217,139,.1)!important;border-color:rgba(201,162,74,.5)!important;color:#f3d98b!important}#${ROOT_ID} .xsj-phone .xsj-screen.app-dex.app-dex .xsj-empty{background:rgba(60,48,100,.55)!important;border:1px solid rgba(201,162,74,.4)!important}#${ROOT_ID} .xsj-phone .xsj-regen-card .xsj-cchips button{width:auto!important;padding:5px 13px!important;font-size:12.5px;border-radius:999px}.xsj-cchips{display:flex;flex-wrap:wrap;gap:6px;margin:4px 0 8px}.xsj-closet-c{flex-wrap:nowrap;overflow-x:auto;scrollbar-width:none;padding:2px 2px 8px;margin:0}#${ROOT_ID} .xsj-phone .xsj-screen.app-closet .xsj-closet-c button{flex:none}
 .xsj-folders{display:grid;grid-template-columns:repeat(2,1fr);gap:22px 16px;padding:22px 4px 10px}
 #${ROOT_ID} .xsj-phone .xsj-screen.app-closet .xsj-folder{position:relative;display:block;height:132px;padding:0!important;background:none!important;border:0!important;box-shadow:none!important;text-align:left;transition:transform .18s}#${ROOT_ID} .xsj-phone .xsj-screen.app-closet .xsj-folder:active{transform:scale(.96)}
